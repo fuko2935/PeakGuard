@@ -1,7 +1,7 @@
 cmake_minimum_required(VERSION 3.20)
-project(CodexLimiter LANGUAGES CXX)
+project(PeakGuard LANGUAGES CXX)
 
 add_subdirectory(tools/EndpointProbe)
-add_subdirectory(tools/LimiterAudioTests)
-add_subdirectory(tools/LimiterStateProbe)
-add_subdirectory(tools/LimiterTray)
+add_subdirectory(tools/PeakGuardAudioTests)
+add_subdirectory(tools/PeakGuardStateProbe)
+add_subdirectory(tools/PeakGuardTray)
