@@ -655,7 +655,7 @@ void LoopbackAudioEngine::ProcessCaptureBuffer() {
 
         if (!isSilent && captureFormatIsFloat_) {
             const UINT32 channels = captureFormat_->nChannels;
-            ApplyLimiter(reinterpret_cast<float*>(data), framesAvailable, channels);
+            ProcessAudio(reinterpret_cast<float*>(data), framesAvailable, channels);
         }
 
         UINT32 renderPadding = 0;
@@ -702,35 +702,13 @@ void LoopbackAudioEngine::ProcessCaptureBuffer() {
     }
 }
 
-void LoopbackAudioEngine::ApplyLimiter(float* frames, UINT32 frameCount, UINT32 channels) {
-    const bool enabled = (sharedState_ == nullptr) || (sharedState_->enabled != 0);
+void LoopbackAudioEngine::ProcessAudio(float* frames, UINT32 frameCount, UINT32 channels) {
+    const bool limiterEnabled = (sharedState_ == nullptr) || (sharedState_->enabled != 0);
+    const bool boostEnabled = (sharedState_ != nullptr) && (sharedState_->boostEnabled != 0);
+    const float boostGain = boostEnabled
+        ? BoostScaledLinearToFloat(sharedState_->boostLinearScaled)
+        : 1.0f;
 
-    // Fast path: limiter disabled — skip DSP, just track output peak for meter
-    if (!enabled) {
-        limiterGain_ = 1.0f;
-
-        float outputPeak = 0.0f;
-        for (UINT32 frame = 0; frame < frameCount; ++frame) {
-            const UINT32 offset = frame * channels;
-            for (UINT32 ch = 0; ch < channels; ++ch) {
-                const float value = fabsf(frames[offset + ch]);
-                if (value > outputPeak) {
-                    outputPeak = value;
-                }
-            }
-        }
-
-        if (sharedState_ != nullptr) {
-            InterlockedExchange(const_cast<volatile LONG*>(&sharedState_->outputPeakMilliDb),
-                LinearToMilliDb(outputPeak));
-            InterlockedIncrement(const_cast<volatile LONG*>(&sharedState_->processCounter));
-        }
-        return;
-    }
-
-    // Full limiter path
-    constexpr float kReleasePerFrame = 0.00008f;
-    float gain = limiterGain_;
     float inputPeak = 0.0f;
     float outputPeak = 0.0f;
 
@@ -738,27 +716,42 @@ void LoopbackAudioEngine::ApplyLimiter(float* frames, UINT32 frameCount, UINT32 
         ? ScaledLinearToFloat(sharedState_->ceilingLinearScaled)
         : ScaledLinearToFloat(kDefaultLinearScaled);
 
+    if (!limiterEnabled) {
+        limiterGain_ = 1.0f;
+    }
+
+    constexpr float kReleasePerFrame = 0.00008f;
+    float gain = limiterGain_;
+
     for (UINT32 frame = 0; frame < frameCount; ++frame) {
-        float peak = 0.0f;
         const UINT32 offset = frame * channels;
+        float boostedPeak = 0.0f;
+
         for (UINT32 ch = 0; ch < channels; ++ch) {
-            const float value = fabsf(frames[offset + ch]);
-            if (value > peak) {
-                peak = value;
+            const float original = fabsf(frames[offset + ch]);
+            if (original > inputPeak) {
+                inputPeak = original;
             }
-        }
-        if (peak > inputPeak) {
-            inputPeak = peak;
+
+            frames[offset + ch] *= boostGain;
+            const float boosted = fabsf(frames[offset + ch]);
+            if (boosted > boostedPeak) {
+                boostedPeak = boosted;
+            }
         }
 
-        const float targetGain = (peak > ceiling) ? (ceiling / peak) : 1.0f;
-        if (targetGain < gain) {
-            gain = targetGain;
-        } else if (gain < 1.0f) {
-            gain += kReleasePerFrame;
-            if (gain > 1.0f) {
-                gain = 1.0f;
+        if (limiterEnabled) {
+            const float targetGain = (boostedPeak > ceiling) ? (ceiling / boostedPeak) : 1.0f;
+            if (targetGain < gain) {
+                gain = targetGain;
+            } else if (gain < 1.0f) {
+                gain += kReleasePerFrame;
+                if (gain > 1.0f) {
+                    gain = 1.0f;
+                }
             }
+        } else {
+            gain = 1.0f;
         }
 
         for (UINT32 ch = 0; ch < channels; ++ch) {
@@ -770,15 +763,13 @@ void LoopbackAudioEngine::ApplyLimiter(float* frames, UINT32 frameCount, UINT32 
         }
     }
 
-    limiterGain_ = gain;
+    limiterGain_ = limiterEnabled ? gain : 1.0f;
 
     if (sharedState_ != nullptr) {
-        if (inputPeak > 0.000001f) {
-            InterlockedExchange(const_cast<volatile LONG*>(&sharedState_->inputPeakMilliDb),
-                LinearToMilliDb(inputPeak));
-            InterlockedExchange(const_cast<volatile LONG*>(&sharedState_->outputPeakMilliDb),
-                LinearToMilliDb(outputPeak));
-        }
+        InterlockedExchange(const_cast<volatile LONG*>(&sharedState_->inputPeakMilliDb),
+            LinearToMilliDb(inputPeak));
+        InterlockedExchange(const_cast<volatile LONG*>(&sharedState_->outputPeakMilliDb),
+            LinearToMilliDb(outputPeak));
         InterlockedIncrement(const_cast<volatile LONG*>(&sharedState_->processCounter));
     }
 }

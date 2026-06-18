@@ -38,7 +38,7 @@ private:
     void AudioThreadProc();
     void ProcessCaptureBuffer();
 
-    void ApplyLimiter(float* frames, UINT32 frameCount, UINT32 channels);
+    void ProcessAudio(float* frames, UINT32 frameCount, UINT32 channels);
     void SetSharedState(AudioEngineState newState);
 
     LimiterSharedState* sharedState_ = nullptr;
