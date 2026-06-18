@@ -19,53 +19,53 @@ Parent context: See `../AGENTS.md`.
 
 ```powershell
 # Build/install Release app, create shortcut, launch tray
-.\scripts\Install-CodexLimiter.ps1 -Configuration Release
+.\scripts\Install-PeakGuard.ps1 -Configuration Release
 
-# After rebuilding LimiterTray, rerun install to refresh the Start Menu/startup copy
-.\scripts\Install-CodexLimiter.ps1 -Configuration Release
+# After rebuilding PeakGuardTray, rerun install to refresh the Start Menu/startup copy
+.\scripts\Install-PeakGuard.ps1 -Configuration Release
 
 # Also enable HKCU startup
-.\scripts\Install-CodexLimiter.ps1 -Configuration Release -EnableStartup
+.\scripts\Install-PeakGuard.ps1 -Configuration Release -EnableStartup
 
 # Stop tray, remove startup entry, shortcut, and installed files
-.\scripts\Uninstall-CodexLimiter.ps1
+.\scripts\Uninstall-PeakGuard.ps1
 ```
 
 ## Patterns & Conventions
 
-- DO: Follow CMake discovery and fallback style in `Install-CodexLimiter.ps1`.
+- DO: Follow CMake discovery and fallback style in `Install-PeakGuard.ps1`.
 - DO: Use `Join-Path`, `Resolve-Path`, and `-LiteralPath` for filesystem operations.
-- DO: Keep HKCU startup changes scoped to `CodexLimiter`.
-- DO: Keep install output under `%LOCALAPPDATA%\\CodexLimiter`.
+- DO: Keep HKCU startup changes scoped to `PeakGuard`.
+- DO: Keep install output under `%LOCALAPPDATA%\\PeakGuard`.
 - MUST NOT: Delete repository files or recurse outside the intended install/start-menu directories.
 
 ## Touch Points / Key Files
 
-- Installer: `Install-CodexLimiter.ps1`.
-- Uninstaller: `Uninstall-CodexLimiter.ps1`.
+- Installer: `Install-PeakGuard.ps1`.
+- Uninstaller: `Uninstall-PeakGuard.ps1`.
 - User-facing commands: `../README.md`.
-- Tray executable target: `../tools/LimiterTray/CMakeLists.txt`.
+- Tray executable target: `../tools/PeakGuardTray/CMakeLists.txt`.
 
 ## JIT Index Hints
 
 ```powershell
-rg -n "CodexLimiter|LimiterTray|Run|Start-Process|Stop-Process" .
+rg -n "PeakGuard|PeakGuardTray|Run|Start-Process|Stop-Process" .
 rg -n "Remove-Item|Copy-Item|New-Item|New-ItemProperty" .
 rg -n "cmake|vswhere|Configuration|EnableStartup" .
 ```
 
 ## Common Gotchas
 
-- `Install-CodexLimiter.ps1` stops existing `LimiterTray` processes before launching the installed copy.
-- `Uninstall-CodexLimiter.ps1` recursively removes `%LOCALAPPDATA%\\CodexLimiter`.
-- The Start Menu shortcut and HKCU startup entry run `%LOCALAPPDATA%\\CodexLimiter\\LimiterTray.exe`, not the repo build output.
-- Rerun `.\scripts\Install-CodexLimiter.ps1 -Configuration Release` after Release tray changes so Start Menu/startup uses the updated binary.
+- `Install-PeakGuard.ps1` stops existing `PeakGuardTray` processes before launching the installed copy.
+- `Uninstall-PeakGuard.ps1` recursively removes `%LOCALAPPDATA%\\PeakGuard`.
+- The Start Menu shortcut and HKCU startup entry run `%LOCALAPPDATA%\\PeakGuard\\PeakGuardTray.exe`, not the repo build output.
+- Rerun `.\scripts\Install-PeakGuard.ps1 -Configuration Release` after Release tray changes so Start Menu/startup uses the updated binary.
 
 ## Pre-PR Checks
 
 ```powershell
-cmake --build build --config Release --target LimiterTray
-powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-CodexLimiter.ps1 -Configuration Release
+cmake --build build --config Release --target PeakGuardTray
+powershell -NoProfile -ExecutionPolicy Bypass -File .\scripts\Install-PeakGuard.ps1 -Configuration Release
 ```
 
 Only run the install check when machine-level side effects are acceptable for the task.

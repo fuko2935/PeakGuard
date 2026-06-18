@@ -21,26 +21,26 @@ Parent context: See `../AGENTS.md`.
 cmake -S . -B build -A x64
 cmake --build build --config Debug
 cmake --build build --config Debug --target EndpointProbe
-cmake --build build --config Debug --target LimiterStateProbe
-cmake --build build --config Debug --target LimiterAudioTests
-cmake --build build --config Release --target LimiterTray
+cmake --build build --config Debug --target PeakGuardStateProbe
+cmake --build build --config Debug --target PeakGuardAudioTests
+cmake --build build --config Release --target PeakGuardTray
 ```
 
 ## Patterns & Conventions
 
-- DO: Follow per-target CMake style in `tools/EndpointProbe/CMakeLists.txt` and `tools/LimiterTray/CMakeLists.txt`.
+- DO: Follow per-target CMake style in `tools/EndpointProbe/CMakeLists.txt` and `tools/PeakGuardTray/CMakeLists.txt`.
 - DO: Use COM initialization and RAII patterns from `tools/EndpointProbe/main.cpp` for console diagnostics.
-- DO: Keep shared behavior testable through headers like `tools/LimiterTray/AudioEndpointSelection.h`.
-- DO: Keep tray app behavior in `tools/LimiterTray/`; probes should inspect or diagnose, not own product logic.
+- DO: Keep shared behavior testable through headers like `tools/PeakGuardTray/AudioEndpointSelection.h`.
+- DO: Keep tray app behavior in `tools/PeakGuardTray/`; probes should inspect or diagnose, not own product logic.
 - MUST NOT: Add generated Visual Studio project files or build artifacts under `tools/`.
 
 ## Touch Points / Key Files
 
 - Root target list: `../CMakeLists.txt`.
-- Tray app: `LimiterTray/`.
-- Native tests: `LimiterAudioTests/`.
+- Tray app: `PeakGuardTray/`.
+- Native tests: `PeakGuardAudioTests/`.
 - Endpoint diagnostics: `EndpointProbe/main.cpp`.
-- Shared-state diagnostics: `LimiterStateProbe/main.cpp`.
+- Shared-state diagnostics: `PeakGuardStateProbe/main.cpp`.
 
 ## JIT Index Hints
 
@@ -48,19 +48,19 @@ cmake --build build --config Release --target LimiterTray
 rg -n "add_executable|target_compile_definitions|target_link_libraries" tools
 rg -n "CoInitializeEx|ComPtr|IMMDevice|IAudioClient" tools
 rg -n "wmain|wWinMain|ParseArgs|PrintUsage" tools
-rg -n "CodexLimiter::" tools
+rg -n "PeakGuard::" tools
 ```
 
 ## Common Gotchas
 
 - `EndpointProbe --render-tone-seconds N` plays audio on the default endpoint.
-- `LimiterStateProbe --enable`, `--disable`, and `--ceiling-millidb` mutate the live shared state.
-- `LimiterTray` can change the default render endpoint while routing through virtual audio.
+- `PeakGuardStateProbe --enable`, `--disable`, and `--ceiling-millidb` mutate the live shared state.
+- `PeakGuardTray` can change the default render endpoint while routing through virtual audio.
 
 ## Pre-PR Checks
 
 ```powershell
 cmake --build build --config Debug
-.\build\tools\LimiterAudioTests\Debug\LimiterAudioTests.exe
-cmake --build build --config Release --target LimiterTray
+.\build\tools\PeakGuardAudioTests\Debug\PeakGuardAudioTests.exe
+cmake --build build --config Release --target PeakGuardTray
 ```
