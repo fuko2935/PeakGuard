@@ -10,9 +10,9 @@
 #include <atomic>
 #include <string>
 
-#include "common/LimiterSharedState.h"
+#include "common/PeakGuardSharedState.h"
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 class LoopbackAudioEngine {
 public:
@@ -22,7 +22,7 @@ public:
     LoopbackAudioEngine(const LoopbackAudioEngine&) = delete;
     LoopbackAudioEngine& operator=(const LoopbackAudioEngine&) = delete;
 
-    bool Start(LimiterSharedState* state);
+    bool Start(PeakGuardSharedState* state);
     void Stop();
     bool IsRunning() const;
 
@@ -43,7 +43,7 @@ private:
     void ProcessAudio(float* frames, UINT32 frameCount, UINT32 channels);
     void SetSharedState(AudioEngineState newState);
 
-    LimiterSharedState* sharedState_ = nullptr;
+    PeakGuardSharedState* sharedState_ = nullptr;
     std::atomic<AudioEngineState> state_{AudioEngineState::Stopped};
     std::atomic<bool> stopRequested_{false};
     std::atomic<bool> deviceChanged_{false};
@@ -86,4 +86,4 @@ private:
     UINT32 sampleRate_ = 0;
 };
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

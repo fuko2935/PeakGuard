@@ -5,7 +5,7 @@
 #include <cstddef>
 #include <string>
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 constexpr int kHotkeyLowerCeilingId = 2001;
 constexpr int kHotkeyRaiseCeilingId = 2002;
@@ -99,4 +99,4 @@ inline LONG LimiterHotkeyStepMilliDb() {
     return 1000;
 }
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

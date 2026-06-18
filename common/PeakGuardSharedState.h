@@ -4,7 +4,7 @@
 
 #include <cmath>
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 constexpr LONG kStateMagic = 0x434C494D; // CLIM
 constexpr LONG kStateVersion = 3;
@@ -31,7 +31,7 @@ enum class AudioEngineState : LONG {
     Error = 4
 };
 
-struct LimiterSharedState {
+struct PeakGuardSharedState {
     volatile LONG magic;
     volatile LONG version;
     volatile LONG enabled;
@@ -127,7 +127,7 @@ inline float ScaledLinearToFloat(LONG value) {
     return static_cast<float>(value) / static_cast<float>(kLinearScale);
 }
 
-inline void InitializeStateFields(LimiterSharedState* state) {
+inline void InitializeStateFields(PeakGuardSharedState* state) {
     InterlockedExchange(const_cast<volatile LONG*>(&state->version), kStateVersion);
     InterlockedExchange(const_cast<volatile LONG*>(&state->enabled), 1);
     InterlockedExchange(const_cast<volatile LONG*>(&state->ceilingMilliDb), kDefaultCeilingMilliDb);
@@ -147,7 +147,7 @@ inline void InitializeStateFields(LimiterSharedState* state) {
     }
 }
 
-inline void InitializeStateIfNeeded(LimiterSharedState* state) {
+inline void InitializeStateIfNeeded(PeakGuardSharedState* state) {
     if (state == nullptr) {
         return;
     }
@@ -173,7 +173,7 @@ inline void InitializeStateIfNeeded(LimiterSharedState* state) {
     }
 }
 
-inline void SetCeilingMilliDb(LimiterSharedState* state, LONG milliDb) {
+inline void SetCeilingMilliDb(PeakGuardSharedState* state, LONG milliDb) {
     if (state == nullptr) {
         return;
     }
@@ -183,7 +183,7 @@ inline void SetCeilingMilliDb(LimiterSharedState* state, LONG milliDb) {
     InterlockedExchange(const_cast<volatile LONG*>(&state->ceilingLinearScaled), MilliDbToLinearScaled(clamped));
 }
 
-inline void SetBoostMilliDb(LimiterSharedState* state, LONG milliDb) {
+inline void SetBoostMilliDb(PeakGuardSharedState* state, LONG milliDb) {
     if (state == nullptr) {
         return;
     }
@@ -207,10 +207,10 @@ public:
 
     bool Open() {
         Close();
-        return OpenNamed(L"Local\\CodexLimiterState");
+        return OpenNamed(L"Local\\PeakGuardState");
     }
 
-    LimiterSharedState* Get() const {
+    PeakGuardSharedState* Get() const {
         return state_;
     }
 
@@ -230,7 +230,7 @@ private:
             securityAttributes.lpSecurityDescriptor != nullptr ? &securityAttributes : nullptr,
             PAGE_READWRITE,
             0,
-            sizeof(LimiterSharedState),
+            sizeof(PeakGuardSharedState),
             name);
         if (mapping == nullptr) {
             mapping = OpenFileMappingW(FILE_MAP_ALL_ACCESS, FALSE, name);
@@ -239,14 +239,14 @@ private:
             return false;
         }
 
-        void* view = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(LimiterSharedState));
+        void* view = MapViewOfFile(mapping, FILE_MAP_ALL_ACCESS, 0, 0, sizeof(PeakGuardSharedState));
         if (view == nullptr) {
             CloseHandle(mapping);
             return false;
         }
 
         mapping_ = mapping;
-        state_ = static_cast<LimiterSharedState*>(view);
+        state_ = static_cast<PeakGuardSharedState*>(view);
         InitializeStateIfNeeded(state_);
         return true;
     }
@@ -263,7 +263,7 @@ private:
     }
 
     HANDLE mapping_ = nullptr;
-    LimiterSharedState* state_ = nullptr;
+    PeakGuardSharedState* state_ = nullptr;
 };
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

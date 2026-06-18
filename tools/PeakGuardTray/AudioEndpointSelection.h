@@ -9,7 +9,7 @@
 #include <cwctype>
 #include <string>
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 inline std::wstring LowerEndpointName(std::wstring value) {
     for (wchar_t& ch : value) {
@@ -111,4 +111,4 @@ inline bool IsFloatPcmFormat(const WAVEFORMATEX* format) {
     return false;
 }
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

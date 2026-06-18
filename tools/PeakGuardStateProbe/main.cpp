@@ -4,7 +4,7 @@
 #include <iostream>
 #include <string>
 
-#include "common/LimiterSharedState.h"
+#include "common/PeakGuardSharedState.h"
 
 namespace {
 
@@ -19,7 +19,7 @@ const wchar_t* AudioEngineStateName(LONG state) {
     }
 }
 
-void PrintState(CodexLimiter::LimiterSharedState* state) {
+void PrintState(PeakGuard::PeakGuardSharedState* state) {
     if (state == nullptr) {
         std::wcout << L"State: unavailable\n";
         return;
@@ -58,7 +58,7 @@ bool TryParseLong(const wchar_t* value, LONG* result) {
 } // namespace
 
 int wmain(int argc, wchar_t** argv) {
-    CodexLimiter::SharedLimiterMapping mapping;
+    PeakGuard::SharedLimiterMapping mapping;
     if (!mapping.Open()) {
         std::wcerr << L"Failed to open limiter state mapping.\n";
         return 1;
@@ -85,7 +85,7 @@ int wmain(int argc, wchar_t** argv) {
                 std::wcerr << L"Invalid boost value.\n";
                 return 2;
             }
-            CodexLimiter::SetBoostMilliDb(state, value);
+            PeakGuard::SetBoostMilliDb(state, value);
         } else if (arg == L"--ceiling-millidb") {
             if (i + 1 >= argc) {
                 std::wcerr << L"--ceiling-millidb requires a value.\n";
@@ -96,7 +96,7 @@ int wmain(int argc, wchar_t** argv) {
                 std::wcerr << L"Invalid ceiling value.\n";
                 return 2;
             }
-            CodexLimiter::SetCeilingMilliDb(state, value);
+            PeakGuard::SetCeilingMilliDb(state, value);
         } else {
             std::wcerr << L"Unknown argument: " << arg << L"\n";
             return 2;

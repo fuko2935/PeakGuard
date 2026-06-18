@@ -14,7 +14,7 @@
 #include <fstream>
 #include <string>
 
-#include "common/LimiterSharedState.h"
+#include "common/PeakGuardSharedState.h"
 #include "AudioEndpointSelection.h"
 #include "AudioPowerPolicy.h"
 #include "HotkeyPolicy.h"
@@ -34,11 +34,11 @@ constexpr UINT_PTR kUiTimer = 1;
 constexpr UINT_PTR kOverlayTimer = 2;
 constexpr UINT kOverlayHideMs = 1400;
 constexpr int kWindowWidth = 560;
-constexpr int kWindowHeight = CodexLimiter::UiWindowHeightPx();
+constexpr int kWindowHeight = PeakGuard::UiWindowHeightPx();
 constexpr int kOverlayWidth = 320;
 constexpr int kOverlayHeight = 96;
-constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\CodexLimiterTrayInstance";
-constexpr wchar_t kMainWindowClassName[] = L"CodexLimiterTrayWindow";
+constexpr wchar_t kSingleInstanceMutexName[] = L"Local\\PeakGuardTrayInstance";
+constexpr wchar_t kMainWindowClassName[] = L"PeakGuardTrayWindow";
 
 constexpr int kIdEnable = 1001;
 constexpr int kIdSlider = 1002;
@@ -70,10 +70,10 @@ constexpr COLORREF kColorRail = RGB(58, 63, 72);
 constexpr COLORREF kColorAccent = RGB(245, 164, 18);
 constexpr COLORREF kColorMeter = RGB(72, 164, 92);
 
-CodexLimiter::SharedLimiterMapping g_mapping;
-CodexLimiter::LimiterSharedState* g_state = nullptr;
-CodexLimiter::LoopbackAudioEngine g_audioEngine;
-CodexLimiter::LimiterSettings g_settings;
+PeakGuard::SharedLimiterMapping g_mapping;
+PeakGuard::PeakGuardSharedState* g_state = nullptr;
+PeakGuard::LoopbackAudioEngine g_audioEngine;
+PeakGuard::LimiterSettings g_settings;
 HANDLE g_singleInstanceMutex = nullptr;
 HWND g_window = nullptr;
 HWND g_overlay = nullptr;
@@ -121,12 +121,12 @@ int g_capturingHotkeyId = 0;
 std::wstring g_settingsMessage;
 std::wstring g_overlayTitle = L"Limiter";
 std::wstring g_overlayValue;
-CodexLimiter::HotkeyBinding g_hotkeys[] = {
-    { CodexLimiter::kHotkeyLowerCeilingId, MOD_CONTROL | MOD_ALT, 'A' },
-    { CodexLimiter::kHotkeyRaiseCeilingId, MOD_CONTROL | MOD_ALT, 'D' },
-    { CodexLimiter::kHotkeyToggleLimiterId, MOD_CONTROL | MOD_ALT, 'S' },
-    { CodexLimiter::kHotkeyLowerBoostId, MOD_CONTROL | MOD_ALT, VK_F6 },
-    { CodexLimiter::kHotkeyRaiseBoostId, MOD_CONTROL | MOD_ALT, VK_F7 },
+PeakGuard::HotkeyBinding g_hotkeys[] = {
+    { PeakGuard::kHotkeyLowerCeilingId, MOD_CONTROL | MOD_ALT, 'A' },
+    { PeakGuard::kHotkeyRaiseCeilingId, MOD_CONTROL | MOD_ALT, 'D' },
+    { PeakGuard::kHotkeyToggleLimiterId, MOD_CONTROL | MOD_ALT, 'S' },
+    { PeakGuard::kHotkeyLowerBoostId, MOD_CONTROL | MOD_ALT, VK_F6 },
+    { PeakGuard::kHotkeyRaiseBoostId, MOD_CONTROL | MOD_ALT, VK_F7 },
 };
 
 std::wstring FormatDb(LONG milliDb) {
@@ -141,7 +141,7 @@ std::wstring FormatDb(LONG milliDb) {
 
 std::wstring FormatBoostDb(LONG milliDb) {
     wchar_t buffer[64]{};
-    swprintf_s(buffer, L"+%.0f dB", static_cast<double>(CodexLimiter::ClampBoostMilliDb(milliDb)) / 1000.0);
+    swprintf_s(buffer, L"+%.0f dB", static_cast<double>(PeakGuard::ClampBoostMilliDb(milliDb)) / 1000.0);
     return buffer;
 }
 
@@ -166,10 +166,10 @@ std::wstring BuildSettingsPath() {
     wchar_t localAppData[MAX_PATH]{};
     DWORD count = GetEnvironmentVariableW(L"LOCALAPPDATA", localAppData, MAX_PATH);
     if (count == 0 || count >= MAX_PATH) {
-        return L"CodexLimiter.settings";
+        return L"PeakGuard.settings";
     }
 
-    std::wstring directory = std::wstring(localAppData) + L"\\CodexLimiter";
+    std::wstring directory = std::wstring(localAppData) + L"\\PeakGuard";
     CreateDirectoryW(directory.c_str(), nullptr);
     return directory + L"\\settings.ini";
 }
@@ -189,8 +189,8 @@ bool TryParseLong(const std::string& value, LONG* parsed) {
     return true;
 }
 
-CodexLimiter::LimiterSettings LoadSettings() {
-    CodexLimiter::LimiterSettings settings{};
+PeakGuard::LimiterSettings LoadSettings() {
+    PeakGuard::LimiterSettings settings{};
     const std::string path = WideToUtf8(g_settingsPath);
     if (path.empty()) {
         return settings;
@@ -214,17 +214,17 @@ CodexLimiter::LimiterSettings LoadSettings() {
         if (key == "enabled" && TryParseLong(value, &parsed)) {
             settings.enabled = parsed != 0;
         } else if (key == "ceilingMilliDb" && TryParseLong(value, &parsed)) {
-            settings.ceilingMilliDb = CodexLimiter::ClampMilliDb(parsed);
+            settings.ceilingMilliDb = PeakGuard::ClampMilliDb(parsed);
         } else if (key == "boostEnabled" && TryParseLong(value, &parsed)) {
             settings.boostEnabled = parsed != 0;
         } else if (key == "boostMilliDb" && TryParseLong(value, &parsed)) {
-            settings.boostMilliDb = CodexLimiter::ClampBoostMilliDb(parsed);
+            settings.boostMilliDb = PeakGuard::ClampBoostMilliDb(parsed);
         } else if (key == "overlayEnabled" && TryParseLong(value, &parsed)) {
             settings.overlayEnabled = parsed != 0;
         } else if (key == "startWithWindows" && TryParseLong(value, &parsed)) {
             settings.startWithWindows = parsed != 0;
         } else if (key == "selectedTab" && TryParseLong(value, &parsed)) {
-            settings.selectedTab = static_cast<CodexLimiter::LimiterSettingsTab>(
+            settings.selectedTab = static_cast<PeakGuard::LimiterSettingsTab>(
                 std::max<LONG>(0, std::min<LONG>(3, parsed)));
         } else if (key == "lowerCeilingHotkey" && TryParseLong(value, &parsed)) {
             settings.lowerCeilingHotkey = static_cast<UINT>(parsed);
@@ -252,7 +252,7 @@ void SaveSettings() {
         return;
     }
 
-    CodexLimiter::LimiterSettings settings = CodexLimiter::ReadSettingsFromState(g_state);
+    PeakGuard::LimiterSettings settings = PeakGuard::ReadSettingsFromState(g_state);
     settings.overlayEnabled = g_settings.overlayEnabled;
     settings.startWithWindows = g_settings.startWithWindows;
     settings.selectedTab = g_settings.selectedTab;
@@ -280,7 +280,7 @@ void SaveSettings() {
     file << "raiseBoostHotkey=" << settings.raiseBoostHotkey << "\n";
 }
 
-CodexLimiter::HotkeyBinding* FindHotkeyBinding(int hotkeyId) {
+PeakGuard::HotkeyBinding* FindHotkeyBinding(int hotkeyId) {
     for (auto& binding : g_hotkeys) {
         if (binding.id == hotkeyId) {
             return &binding;
@@ -289,49 +289,49 @@ CodexLimiter::HotkeyBinding* FindHotkeyBinding(int hotkeyId) {
     return nullptr;
 }
 
-UINT SettingsHotkeyForId(const CodexLimiter::LimiterSettings& settings, int hotkeyId) {
+UINT SettingsHotkeyForId(const PeakGuard::LimiterSettings& settings, int hotkeyId) {
     switch (hotkeyId) {
-    case CodexLimiter::kHotkeyLowerCeilingId:
+    case PeakGuard::kHotkeyLowerCeilingId:
         return settings.lowerCeilingHotkey;
-    case CodexLimiter::kHotkeyRaiseCeilingId:
+    case PeakGuard::kHotkeyRaiseCeilingId:
         return settings.raiseCeilingHotkey;
-    case CodexLimiter::kHotkeyToggleLimiterId:
+    case PeakGuard::kHotkeyToggleLimiterId:
         return settings.toggleLimiterHotkey;
-    case CodexLimiter::kHotkeyLowerBoostId:
+    case PeakGuard::kHotkeyLowerBoostId:
         return settings.lowerBoostHotkey;
-    case CodexLimiter::kHotkeyRaiseBoostId:
+    case PeakGuard::kHotkeyRaiseBoostId:
         return settings.raiseBoostHotkey;
     default:
-        return CodexLimiter::LimiterHotkeyKey(hotkeyId);
+        return PeakGuard::LimiterHotkeyKey(hotkeyId);
     }
 }
 
 void ApplyHotkeysFromSettings() {
     for (auto& binding : g_hotkeys) {
         const UINT key = SettingsHotkeyForId(g_settings, binding.id);
-        binding.modifiers = CodexLimiter::LimiterHotkeyModifiers();
-        binding.key = CodexLimiter::IsSupportedLimiterHotkey(binding.modifiers, key)
+        binding.modifiers = PeakGuard::LimiterHotkeyModifiers();
+        binding.key = PeakGuard::IsSupportedLimiterHotkey(binding.modifiers, key)
             ? key
-            : CodexLimiter::LimiterHotkeyKey(binding.id);
+            : PeakGuard::LimiterHotkeyKey(binding.id);
     }
 }
 
 void StoreHotkeysToSettings() {
     for (const auto& binding : g_hotkeys) {
         switch (binding.id) {
-        case CodexLimiter::kHotkeyLowerCeilingId:
+        case PeakGuard::kHotkeyLowerCeilingId:
             g_settings.lowerCeilingHotkey = binding.key;
             break;
-        case CodexLimiter::kHotkeyRaiseCeilingId:
+        case PeakGuard::kHotkeyRaiseCeilingId:
             g_settings.raiseCeilingHotkey = binding.key;
             break;
-        case CodexLimiter::kHotkeyToggleLimiterId:
+        case PeakGuard::kHotkeyToggleLimiterId:
             g_settings.toggleLimiterHotkey = binding.key;
             break;
-        case CodexLimiter::kHotkeyLowerBoostId:
+        case PeakGuard::kHotkeyLowerBoostId:
             g_settings.lowerBoostHotkey = binding.key;
             break;
-        case CodexLimiter::kHotkeyRaiseBoostId:
+        case PeakGuard::kHotkeyRaiseBoostId:
             g_settings.raiseBoostHotkey = binding.key;
             break;
         default:
@@ -342,17 +342,17 @@ void StoreHotkeysToSettings() {
 
 void ResetHotkeysToDefaults() {
     for (auto& binding : g_hotkeys) {
-        binding = CodexLimiter::DefaultHotkeyBinding(binding.id);
+        binding = PeakGuard::DefaultHotkeyBinding(binding.id);
     }
     StoreHotkeysToSettings();
 }
 
 std::wstring HotkeyDisplayForId(int hotkeyId) {
-    const CodexLimiter::HotkeyBinding* binding = FindHotkeyBinding(hotkeyId);
+    const PeakGuard::HotkeyBinding* binding = FindHotkeyBinding(hotkeyId);
     if (binding == nullptr) {
         return L"Unassigned";
     }
-    return CodexLimiter::LimiterHotkeyDisplay(binding->modifiers, binding->key);
+    return PeakGuard::LimiterHotkeyDisplay(binding->modifiers, binding->key);
 }
 
 std::wstring HotkeyButtonText(const wchar_t* label, int hotkeyId) {
@@ -362,23 +362,23 @@ std::wstring HotkeyButtonText(const wchar_t* label, int hotkeyId) {
 void UpdateSettingsLabels() {
     if (g_hotkeyLowerCeiling != nullptr) {
         SetWindowTextW(g_hotkeyLowerCeiling,
-            HotkeyButtonText(L"Limiter down", CodexLimiter::kHotkeyLowerCeilingId).c_str());
+            HotkeyButtonText(L"Limiter down", PeakGuard::kHotkeyLowerCeilingId).c_str());
     }
     if (g_hotkeyRaiseCeiling != nullptr) {
         SetWindowTextW(g_hotkeyRaiseCeiling,
-            HotkeyButtonText(L"Limiter up", CodexLimiter::kHotkeyRaiseCeilingId).c_str());
+            HotkeyButtonText(L"Limiter up", PeakGuard::kHotkeyRaiseCeilingId).c_str());
     }
     if (g_hotkeyToggleLimiter != nullptr) {
         SetWindowTextW(g_hotkeyToggleLimiter,
-            HotkeyButtonText(L"Limiter toggle", CodexLimiter::kHotkeyToggleLimiterId).c_str());
+            HotkeyButtonText(L"Limiter toggle", PeakGuard::kHotkeyToggleLimiterId).c_str());
     }
     if (g_hotkeyLowerBoost != nullptr) {
         SetWindowTextW(g_hotkeyLowerBoost,
-            HotkeyButtonText(L"Boost down", CodexLimiter::kHotkeyLowerBoostId).c_str());
+            HotkeyButtonText(L"Boost down", PeakGuard::kHotkeyLowerBoostId).c_str());
     }
     if (g_hotkeyRaiseBoost != nullptr) {
         SetWindowTextW(g_hotkeyRaiseBoost,
-            HotkeyButtonText(L"Boost up", CodexLimiter::kHotkeyRaiseBoostId).c_str());
+            HotkeyButtonText(L"Boost up", PeakGuard::kHotkeyRaiseBoostId).c_str());
     }
     if (g_startupToggle != nullptr) {
         SetWindowTextW(g_startupToggle, g_settings.startWithWindows
@@ -406,10 +406,10 @@ void ShowControl(HWND control, bool visible) {
 
 void ApplyTabVisibility() {
     const auto tab = g_settings.selectedTab;
-    const bool limiterTab = tab == CodexLimiter::LimiterSettingsTab::Limiter;
-    const bool hotkeysTab = tab == CodexLimiter::LimiterSettingsTab::Hotkeys;
-    const bool startupTab = tab == CodexLimiter::LimiterSettingsTab::Startup;
-    const bool powerTab = tab == CodexLimiter::LimiterSettingsTab::Power;
+    const bool limiterTab = tab == PeakGuard::LimiterSettingsTab::Limiter;
+    const bool hotkeysTab = tab == PeakGuard::LimiterSettingsTab::Hotkeys;
+    const bool startupTab = tab == PeakGuard::LimiterSettingsTab::Startup;
+    const bool powerTab = tab == PeakGuard::LimiterSettingsTab::Power;
 
     ShowControl(g_peakText, limiterTab);
     ShowControl(g_meter, limiterTab);
@@ -504,11 +504,11 @@ bool SetStartWithWindows(bool enabled) {
         return false;
     }
 
-    const std::wstring valueName = CodexLimiter::StartupRegistryValueName();
+    const std::wstring valueName = PeakGuard::StartupRegistryValueName();
     bool success = false;
     if (enabled) {
         const std::wstring path = CurrentExecutablePath();
-        const std::wstring command = CodexLimiter::QuoteStartupCommand(path);
+        const std::wstring command = PeakGuard::QuoteStartupCommand(path);
         success = !path.empty() && RegSetValueExW(key, valueName.c_str(), 0, REG_SZ,
             reinterpret_cast<const BYTE*>(command.c_str()),
             static_cast<DWORD>((command.size() + 1) * sizeof(wchar_t))) == ERROR_SUCCESS;
@@ -527,27 +527,27 @@ bool IsStartWithWindowsEnabled() {
         return false;
     }
 
-    const std::wstring valueName = CodexLimiter::StartupRegistryValueName();
+    const std::wstring valueName = PeakGuard::StartupRegistryValueName();
     const LSTATUS status = RegQueryValueExW(key, valueName.c_str(), nullptr, nullptr, nullptr, nullptr);
     RegCloseKey(key);
     return status == ERROR_SUCCESS;
 }
 
 int MilliDbToSliderPos(LONG milliDb) {
-    milliDb = CodexLimiter::ClampMilliDb(milliDb);
-    return static_cast<int>((milliDb - CodexLimiter::kMinCeilingMilliDb) / 1000);
+    milliDb = PeakGuard::ClampMilliDb(milliDb);
+    return static_cast<int>((milliDb - PeakGuard::kMinCeilingMilliDb) / 1000);
 }
 
 LONG SliderPosToMilliDb(int position) {
-    return CodexLimiter::ClampMilliDb(CodexLimiter::kMinCeilingMilliDb + (position * 1000));
+    return PeakGuard::ClampMilliDb(PeakGuard::kMinCeilingMilliDb + (position * 1000));
 }
 
 int BoostMilliDbToSliderPos(LONG milliDb) {
-    return static_cast<int>(CodexLimiter::ClampBoostMilliDb(milliDb) / 1000);
+    return static_cast<int>(PeakGuard::ClampBoostMilliDb(milliDb) / 1000);
 }
 
 LONG BoostSliderPosToMilliDb(int position) {
-    return CodexLimiter::ClampBoostMilliDb(position * 1000);
+    return PeakGuard::ClampBoostMilliDb(position * 1000);
 }
 
 std::wstring ReadDefaultDeviceName();
@@ -592,9 +592,9 @@ public:
         return S_OK;
     }
     HRESULT STDMETHODCALLTYPE OnDeviceStateChanged(LPCWSTR deviceId, DWORD newState) override {
-        if (CodexLimiter::IsActiveEndpointState(newState)) {
+        if (PeakGuard::IsActiveEndpointState(newState)) {
             g_audioEngine.OnDefaultDeviceChanged(deviceId);
-        } else if (CodexLimiter::EndpointNotificationRequiresRetarget(deviceId, newState)) {
+        } else if (PeakGuard::EndpointNotificationRequiresRetarget(deviceId, newState)) {
             g_audioEngine.OnDefaultDeviceChanged(nullptr);
         }
         return S_OK;
@@ -641,11 +641,11 @@ std::wstring ReadDefaultDeviceName() {
 void UpdateTrayTip() {
     std::wstring newTip;
     if (g_state == nullptr) {
-        newTip = L"Codex Limiter: settings unavailable";
+        newTip = L"PeakGuard: settings unavailable";
     } else if (g_state->enabled) {
-        newTip = L"Codex Limiter: on";
+        newTip = L"PeakGuard: on";
     } else {
-        newTip = L"Codex Limiter: off";
+        newTip = L"PeakGuard: off";
     }
 
     if (newTip == g_lastTrayTip) {
@@ -657,34 +657,34 @@ void UpdateTrayTip() {
     Shell_NotifyIconW(NIM_MODIFY, &g_trayIcon);
 }
 
-const wchar_t* EngineStateLabel(CodexLimiter::AudioEngineState engineState) {
+const wchar_t* EngineStateLabel(PeakGuard::AudioEngineState engineState) {
     switch (engineState) {
-    case CodexLimiter::AudioEngineState::Stopped:
+    case PeakGuard::AudioEngineState::Stopped:
         return L"Engine stopped";
-    case CodexLimiter::AudioEngineState::Running:
+    case PeakGuard::AudioEngineState::Running:
         return L"Engine active";
-    case CodexLimiter::AudioEngineState::Silence:
+    case PeakGuard::AudioEngineState::Silence:
         return L"Engine idle (silence)";
-    case CodexLimiter::AudioEngineState::DeviceChanged:
+    case PeakGuard::AudioEngineState::DeviceChanged:
         return L"Switching device...";
-    case CodexLimiter::AudioEngineState::Error:
+    case PeakGuard::AudioEngineState::Error:
         return L"Engine error";
     default:
         return L"Engine unknown";
     }
 }
 
-std::wstring ShortEngineStateLabel(CodexLimiter::AudioEngineState engineState) {
+std::wstring ShortEngineStateLabel(PeakGuard::AudioEngineState engineState) {
     switch (engineState) {
-    case CodexLimiter::AudioEngineState::Running:
+    case PeakGuard::AudioEngineState::Running:
         return L"Active";
-    case CodexLimiter::AudioEngineState::Silence:
+    case PeakGuard::AudioEngineState::Silence:
         return L"Idle";
-    case CodexLimiter::AudioEngineState::DeviceChanged:
+    case PeakGuard::AudioEngineState::DeviceChanged:
         return L"Device changed";
-    case CodexLimiter::AudioEngineState::Error:
+    case PeakGuard::AudioEngineState::Error:
         return L"Error";
-    case CodexLimiter::AudioEngineState::Stopped:
+    case PeakGuard::AudioEngineState::Stopped:
         return L"Stopped";
     default:
         return L"Unknown";
@@ -770,11 +770,11 @@ void AdjustCeilingByMilliDb(LONG deltaMilliDb) {
     do {
         oldVal = InterlockedCompareExchange(
             const_cast<volatile LONG*>(&g_state->ceilingMilliDb), 0, 0);
-        newVal = CodexLimiter::ClampMilliDb(oldVal + deltaMilliDb);
+        newVal = PeakGuard::ClampMilliDb(oldVal + deltaMilliDb);
     } while (InterlockedCompareExchange(
         const_cast<volatile LONG*>(&g_state->ceilingMilliDb), newVal, oldVal) != oldVal);
     InterlockedExchange(const_cast<volatile LONG*>(&g_state->ceilingLinearScaled),
-        CodexLimiter::MilliDbToLinearScaled(newVal));
+        PeakGuard::MilliDbToLinearScaled(newVal));
     SaveSettings();
     UpdateControls();
 }
@@ -792,11 +792,11 @@ void AdjustBoostByMilliDb(LONG deltaMilliDb) {
     do {
         oldVal = InterlockedCompareExchange(
             const_cast<volatile LONG*>(&g_state->boostMilliDb), 0, 0);
-        newVal = CodexLimiter::ClampBoostMilliDb(oldVal + deltaMilliDb);
+        newVal = PeakGuard::ClampBoostMilliDb(oldVal + deltaMilliDb);
     } while (InterlockedCompareExchange(
         const_cast<volatile LONG*>(&g_state->boostMilliDb), newVal, oldVal) != oldVal);
     InterlockedExchange64(const_cast<volatile LONGLONG*>(&g_state->boostLinearScaled),
-        CodexLimiter::BoostMilliDbToLinearScaled(newVal));
+        PeakGuard::BoostMilliDbToLinearScaled(newVal));
     SaveSettings();
     UpdateControls();
 }
@@ -815,7 +815,7 @@ void ToggleLimiterEnabled() {
     UpdateControls();
 }
 
-void SelectTab(CodexLimiter::LimiterSettingsTab tab) {
+void SelectTab(PeakGuard::LimiterSettingsTab tab) {
     g_settings.selectedTab = tab;
     SaveSettings();
     UpdateSettingsLabels();
@@ -841,7 +841,7 @@ bool CompleteHotkeyCapture(WPARAM key) {
     }
 
     const UINT hotkey = static_cast<UINT>(key);
-    if (CodexLimiter::IsHotkeyCaptureModifierKey(hotkey)) {
+    if (PeakGuard::IsHotkeyCaptureModifierKey(hotkey)) {
         return true;
     }
     if (hotkey == VK_ESCAPE) {
@@ -854,9 +854,9 @@ bool CompleteHotkeyCapture(WPARAM key) {
 
     const UINT modifiers = ((GetKeyState(VK_CONTROL) & 0x8000) != 0 ? MOD_CONTROL : 0) |
         ((GetKeyState(VK_MENU) & 0x8000) != 0 ? MOD_ALT : 0);
-    CodexLimiter::HotkeyBinding* binding = FindHotkeyBinding(g_capturingHotkeyId);
-    if (binding != nullptr && CodexLimiter::IsSupportedLimiterHotkey(modifiers, hotkey)) {
-        if (CodexLimiter::HasDuplicateLimiterHotkey(
+    PeakGuard::HotkeyBinding* binding = FindHotkeyBinding(g_capturingHotkeyId);
+    if (binding != nullptr && PeakGuard::IsSupportedLimiterHotkey(modifiers, hotkey)) {
+        if (PeakGuard::HasDuplicateLimiterHotkey(
                 g_hotkeys, ARRAYSIZE(g_hotkeys), g_capturingHotkeyId, modifiers, hotkey)) {
             g_settingsMessage = L"Hotkey already assigned";
             UpdateControls();
@@ -919,7 +919,7 @@ bool ShouldRunUiTimer() {
 
 void StartUiTimer() {
     if (g_window != nullptr && ShouldRunUiTimer()) {
-        SetTimer(g_window, kUiTimer, CodexLimiter::UiUpdateIntervalMs(), nullptr);
+        SetTimer(g_window, kUiTimer, PeakGuard::UiUpdateIntervalMs(), nullptr);
     }
 }
 
@@ -977,7 +977,7 @@ void HideLimiterOverlay() {
 }
 
 bool RegisterOneHotkey(int hotkeyId, const wchar_t* label) {
-    CodexLimiter::HotkeyBinding* binding = FindHotkeyBinding(hotkeyId);
+    PeakGuard::HotkeyBinding* binding = FindHotkeyBinding(hotkeyId);
     if (binding != nullptr && RegisterHotKey(g_window, hotkeyId, binding->modifiers, binding->key)) {
         return true;
     }
@@ -992,11 +992,11 @@ bool RegisterOneHotkey(int hotkeyId, const wchar_t* label) {
 
 void RegisterLimiterHotkeys() {
     g_hotkeyStatus.clear();
-    RegisterOneHotkey(CodexLimiter::kHotkeyLowerCeilingId, HotkeyDisplayForId(CodexLimiter::kHotkeyLowerCeilingId).c_str());
-    RegisterOneHotkey(CodexLimiter::kHotkeyRaiseCeilingId, HotkeyDisplayForId(CodexLimiter::kHotkeyRaiseCeilingId).c_str());
-    RegisterOneHotkey(CodexLimiter::kHotkeyToggleLimiterId, HotkeyDisplayForId(CodexLimiter::kHotkeyToggleLimiterId).c_str());
-    RegisterOneHotkey(CodexLimiter::kHotkeyLowerBoostId, HotkeyDisplayForId(CodexLimiter::kHotkeyLowerBoostId).c_str());
-    RegisterOneHotkey(CodexLimiter::kHotkeyRaiseBoostId, HotkeyDisplayForId(CodexLimiter::kHotkeyRaiseBoostId).c_str());
+    RegisterOneHotkey(PeakGuard::kHotkeyLowerCeilingId, HotkeyDisplayForId(PeakGuard::kHotkeyLowerCeilingId).c_str());
+    RegisterOneHotkey(PeakGuard::kHotkeyRaiseCeilingId, HotkeyDisplayForId(PeakGuard::kHotkeyRaiseCeilingId).c_str());
+    RegisterOneHotkey(PeakGuard::kHotkeyToggleLimiterId, HotkeyDisplayForId(PeakGuard::kHotkeyToggleLimiterId).c_str());
+    RegisterOneHotkey(PeakGuard::kHotkeyLowerBoostId, HotkeyDisplayForId(PeakGuard::kHotkeyLowerBoostId).c_str());
+    RegisterOneHotkey(PeakGuard::kHotkeyRaiseBoostId, HotkeyDisplayForId(PeakGuard::kHotkeyRaiseBoostId).c_str());
     if (g_hotkeyStatus.empty()) {
         g_hotkeyStatus = L"hotkeys OK";
     }
@@ -1010,24 +1010,24 @@ void UnregisterLimiterHotkeys() {
 
 bool HandleLimiterHotkey(WPARAM hotkeyId) {
     switch (static_cast<int>(hotkeyId)) {
-    case CodexLimiter::kHotkeyLowerCeilingId:
-        AdjustCeilingByMilliDb(-CodexLimiter::LimiterHotkeyStepMilliDb());
+    case PeakGuard::kHotkeyLowerCeilingId:
+        AdjustCeilingByMilliDb(-PeakGuard::LimiterHotkeyStepMilliDb());
         ShowLimiterOverlay(L"Limiter", g_state != nullptr ? FormatDb(g_state->ceilingMilliDb) : L"Unavailable");
         return true;
-    case CodexLimiter::kHotkeyRaiseCeilingId:
-        AdjustCeilingByMilliDb(CodexLimiter::LimiterHotkeyStepMilliDb());
+    case PeakGuard::kHotkeyRaiseCeilingId:
+        AdjustCeilingByMilliDb(PeakGuard::LimiterHotkeyStepMilliDb());
         ShowLimiterOverlay(L"Limiter", g_state != nullptr ? FormatDb(g_state->ceilingMilliDb) : L"Unavailable");
         return true;
-    case CodexLimiter::kHotkeyToggleLimiterId:
+    case PeakGuard::kHotkeyToggleLimiterId:
         ToggleLimiterEnabled();
         ShowLimiterOverlay(L"Limiter", (g_state != nullptr && g_state->enabled != 0) ? L"On" : L"Off");
         return true;
-    case CodexLimiter::kHotkeyLowerBoostId:
-        AdjustBoostByMilliDb(-CodexLimiter::LimiterHotkeyStepMilliDb());
+    case PeakGuard::kHotkeyLowerBoostId:
+        AdjustBoostByMilliDb(-PeakGuard::LimiterHotkeyStepMilliDb());
         ShowLimiterOverlay(L"Soundbooster", g_state != nullptr ? FormatBoostDb(g_state->boostMilliDb) : L"Unavailable");
         return true;
-    case CodexLimiter::kHotkeyRaiseBoostId:
-        AdjustBoostByMilliDb(CodexLimiter::LimiterHotkeyStepMilliDb());
+    case PeakGuard::kHotkeyRaiseBoostId:
+        AdjustBoostByMilliDb(PeakGuard::LimiterHotkeyStepMilliDb());
         ShowLimiterOverlay(L"Soundbooster", g_state != nullptr ? FormatBoostDb(g_state->boostMilliDb) : L"Unavailable");
         return true;
     default:
@@ -1075,18 +1075,18 @@ LRESULT CALLBACK MeterProc(HWND window, UINT message, WPARAM wParam, LPARAM lPar
         FillRect(dc, &rect, g_panelBrush);
 
         LONG peak = (g_state != nullptr && g_processingActive) ? g_state->outputPeakMilliDb : -120000;
-        peak = std::max<LONG>(CodexLimiter::kMinCeilingMilliDb, std::min<LONG>(0, peak));
+        peak = std::max<LONG>(PeakGuard::kMinCeilingMilliDb, std::min<LONG>(0, peak));
         const int width = rect.right - rect.left;
-        const int fill = static_cast<int>((static_cast<double>(peak - CodexLimiter::kMinCeilingMilliDb) /
-            static_cast<double>(-CodexLimiter::kMinCeilingMilliDb)) * width);
+        const int fill = static_cast<int>((static_cast<double>(peak - PeakGuard::kMinCeilingMilliDb) /
+            static_cast<double>(-PeakGuard::kMinCeilingMilliDb)) * width);
 
         RECT fillRect = rect;
         fillRect.right = fillRect.left + std::max(0, std::min(width, fill));
         FillRect(dc, &fillRect, g_meterFillBrush);
 
         if (g_state != nullptr) {
-            const int marker = static_cast<int>((static_cast<double>(g_state->ceilingMilliDb - CodexLimiter::kMinCeilingMilliDb) /
-                static_cast<double>(-CodexLimiter::kMinCeilingMilliDb)) * width);
+            const int marker = static_cast<int>((static_cast<double>(g_state->ceilingMilliDb - PeakGuard::kMinCeilingMilliDb) /
+                static_cast<double>(-PeakGuard::kMinCeilingMilliDb)) * width);
             HGDIOBJ oldPen = SelectObject(dc, g_ceilingPen);
             MoveToEx(dc, marker, rect.top, nullptr);
             LineTo(dc, marker, rect.bottom);
@@ -1130,7 +1130,7 @@ LRESULT CALLBACK OverlayProc(HWND window, UINT message, WPARAM wParam, LPARAM lP
         SetTextColor(dc, kColorText);
         DrawTextW(dc, g_overlayValue.empty() ? L"-" : g_overlayValue.c_str(), -1, &rightTitle, DT_LEFT | DT_SINGLELINE | DT_VCENTER);
 
-        const LONG ceiling = g_state != nullptr ? g_state->ceilingMilliDb : CodexLimiter::kDefaultCeilingMilliDb;
+        const LONG ceiling = g_state != nullptr ? g_state->ceilingMilliDb : PeakGuard::kDefaultCeilingMilliDb;
         RECT rail{ 24, 54, rect.right - 24, 64 };
         FillRect(dc, &rail, g_railBrush);
         const int width = rail.right - rail.left;
@@ -1170,7 +1170,7 @@ void SetCeilingFromSliderX(HWND window, int x) {
         return;
     }
 
-    CodexLimiter::SetCeilingMilliDb(g_state, SliderPosToMilliDb(SliderXToPosition(window, x)));
+    PeakGuard::SetCeilingMilliDb(g_state, SliderPosToMilliDb(SliderXToPosition(window, x)));
     SaveSettings();
     UpdateControls();
 }
@@ -1194,7 +1194,7 @@ void SetBoostFromSliderX(HWND window, int x) {
         return;
     }
 
-    CodexLimiter::SetBoostMilliDb(g_state, BoostSliderPosToMilliDb(BoostSliderXToPosition(window, x)));
+    PeakGuard::SetBoostMilliDb(g_state, BoostSliderPosToMilliDb(BoostSliderXToPosition(window, x)));
     SaveSettings();
     UpdateControls();
 }
@@ -1267,8 +1267,8 @@ LRESULT CALLBACK SliderProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         const bool isBoostSlider = window == g_boostSlider;
         const int maxPosition = isBoostSlider ? 24 : 75;
         const int position = isBoostSlider
-            ? BoostMilliDbToSliderPos(g_state != nullptr ? g_state->boostMilliDb : CodexLimiter::kDefaultBoostMilliDb)
-            : MilliDbToSliderPos(g_state != nullptr ? g_state->ceilingMilliDb : CodexLimiter::kDefaultCeilingMilliDb);
+            ? BoostMilliDbToSliderPos(g_state != nullptr ? g_state->boostMilliDb : PeakGuard::kDefaultBoostMilliDb)
+            : MilliDbToSliderPos(g_state != nullptr ? g_state->ceilingMilliDb : PeakGuard::kDefaultCeilingMilliDb);
         const int knobX = left + static_cast<int>((static_cast<double>(position) / static_cast<double>(maxPosition)) * (right - left));
 
         RECT active{ left, rail.top, knobX, rail.bottom };
@@ -1314,7 +1314,7 @@ void AddTrayIcon(HWND window) {
     if (g_trayIcon.hIcon == nullptr) {
         g_trayIcon.hIcon = LoadIconW(nullptr, IDI_APPLICATION);
     }
-    wcscpy_s(g_trayIcon.szTip, L"Codex Limiter");
+    wcscpy_s(g_trayIcon.szTip, L"PeakGuard");
     Shell_NotifyIconW(NIM_ADD, &g_trayIcon);
 }
 
@@ -1325,8 +1325,8 @@ void RemoveTrayIcon() {
 void CreateOverlayWindow() {
     g_overlay = CreateWindowExW(
         WS_EX_TOOLWINDOW | WS_EX_TOPMOST | WS_EX_LAYERED | WS_EX_NOACTIVATE | WS_EX_TRANSPARENT,
-        L"CodexLimiterOverlay",
-        L"Codex Limiter",
+        L"PeakGuardOverlay",
+        L"PeakGuard",
         WS_POPUP,
         0,
         0,
@@ -1360,11 +1360,11 @@ void CreateControls(HWND window) {
 
     g_peakText = CreateWindowExW(0, L"STATIC", L"Output: -inf dBFS", WS_CHILD | WS_VISIBLE | SS_CENTER,
         16, 14, 310, 20, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdPeakText)), g_instance, nullptr);
-    g_meter = CreateWindowExW(0, L"CodexLimiterMeter", nullptr, WS_CHILD | WS_VISIBLE,
+    g_meter = CreateWindowExW(0, L"PeakGuardMeter", nullptr, WS_CHILD | WS_VISIBLE,
         16, 38, 310, 18, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdMeter)), g_instance, nullptr);
     g_ceilingText = CreateWindowExW(0, L"STATIC", L"Ceiling: -30.0 dBFS", WS_CHILD | WS_VISIBLE | SS_CENTER,
         16, 66, 310, 20, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdCeilingText)), g_instance, nullptr);
-    g_slider = CreateWindowExW(0, L"CodexLimiterSlider", nullptr, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+    g_slider = CreateWindowExW(0, L"PeakGuardSlider", nullptr, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         16, 90, 310, 34, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdSlider)), g_instance, nullptr);
 
     g_enable = CreateWindowExW(0, L"BUTTON", L"Limiter enabled", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
@@ -1374,7 +1374,7 @@ void CreateControls(HWND window) {
         16, 160, 190, 24, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBoostEnable)), g_instance, nullptr);
     g_boostText = CreateWindowExW(0, L"STATIC", L"Boost: +0 dB", WS_CHILD | WS_VISIBLE | SS_CENTER,
         16, 192, 310, 20, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBoostText)), g_instance, nullptr);
-    g_boostSlider = CreateWindowExW(0, L"CodexLimiterSlider", nullptr, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+    g_boostSlider = CreateWindowExW(0, L"PeakGuardSlider", nullptr, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
         16, 216, 310, 34, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBoostSlider)), g_instance, nullptr);
 
     g_hotkeyLowerCeiling = CreateWindowExW(0, L"BUTTON", L"", WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
@@ -1431,7 +1431,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         g_mapping.Open();
         g_state = g_mapping.Get();
         if (g_state != nullptr) {
-            CodexLimiter::ApplySettings(g_state, g_settings);
+            PeakGuard::ApplySettings(g_state, g_settings);
         }
         RegisterLimiterHotkeys();
         g_defaultDeviceName = ReadDefaultDeviceName();
@@ -1459,8 +1459,8 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         return reinterpret_cast<LRESULT>(g_windowBrush);
     case WM_GETMINMAXINFO: {
         MINMAXINFO* info = reinterpret_cast<MINMAXINFO*>(lParam);
-        info->ptMinTrackSize.x = CodexLimiter::UiWindowMinWidthPx();
-        info->ptMinTrackSize.y = CodexLimiter::UiWindowMinHeightPx();
+        info->ptMinTrackSize.x = PeakGuard::UiWindowMinWidthPx();
+        info->ptMinTrackSize.y = PeakGuard::UiWindowMinHeightPx();
         return 0;
     }
     case WM_SIZE:
@@ -1475,31 +1475,31 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
     case WM_COMMAND:
         switch (LOWORD(wParam)) {
         case kIdTabLimiter:
-            SelectTab(CodexLimiter::LimiterSettingsTab::Limiter);
+            SelectTab(PeakGuard::LimiterSettingsTab::Limiter);
             return 0;
         case kIdTabHotkeys:
-            SelectTab(CodexLimiter::LimiterSettingsTab::Hotkeys);
+            SelectTab(PeakGuard::LimiterSettingsTab::Hotkeys);
             return 0;
         case kIdTabStartup:
-            SelectTab(CodexLimiter::LimiterSettingsTab::Startup);
+            SelectTab(PeakGuard::LimiterSettingsTab::Startup);
             return 0;
         case kIdTabPower:
-            SelectTab(CodexLimiter::LimiterSettingsTab::Power);
+            SelectTab(PeakGuard::LimiterSettingsTab::Power);
             return 0;
         case kIdHotkeyLowerCeiling:
-            BeginHotkeyCapture(CodexLimiter::kHotkeyLowerCeilingId, g_hotkeyLowerCeiling);
+            BeginHotkeyCapture(PeakGuard::kHotkeyLowerCeilingId, g_hotkeyLowerCeiling);
             return 0;
         case kIdHotkeyRaiseCeiling:
-            BeginHotkeyCapture(CodexLimiter::kHotkeyRaiseCeilingId, g_hotkeyRaiseCeiling);
+            BeginHotkeyCapture(PeakGuard::kHotkeyRaiseCeilingId, g_hotkeyRaiseCeiling);
             return 0;
         case kIdHotkeyToggleLimiter:
-            BeginHotkeyCapture(CodexLimiter::kHotkeyToggleLimiterId, g_hotkeyToggleLimiter);
+            BeginHotkeyCapture(PeakGuard::kHotkeyToggleLimiterId, g_hotkeyToggleLimiter);
             return 0;
         case kIdHotkeyLowerBoost:
-            BeginHotkeyCapture(CodexLimiter::kHotkeyLowerBoostId, g_hotkeyLowerBoost);
+            BeginHotkeyCapture(PeakGuard::kHotkeyLowerBoostId, g_hotkeyLowerBoost);
             return 0;
         case kIdHotkeyRaiseBoost:
-            BeginHotkeyCapture(CodexLimiter::kHotkeyRaiseBoostId, g_hotkeyRaiseBoost);
+            BeginHotkeyCapture(PeakGuard::kHotkeyRaiseBoostId, g_hotkeyRaiseBoost);
             return 0;
         case kIdHotkeyReset:
             ResetHotkeysToDefaults();
@@ -1545,7 +1545,7 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
     case WM_HSCROLL:
         if (reinterpret_cast<HWND>(lParam) == g_slider && g_state != nullptr) {
             const int position = static_cast<int>(SendMessageW(g_slider, TBM_GETPOS, 0, 0));
-            CodexLimiter::SetCeilingMilliDb(g_state, SliderPosToMilliDb(position));
+            PeakGuard::SetCeilingMilliDb(g_state, SliderPosToMilliDb(position));
             SaveSettings();
             UpdateControls();
             return 0;
@@ -1664,7 +1664,7 @@ bool RegisterWindowClasses() {
     WNDCLASSW meterClass{};
     meterClass.lpfnWndProc = MeterProc;
     meterClass.hInstance = g_instance;
-    meterClass.lpszClassName = L"CodexLimiterMeter";
+    meterClass.lpszClassName = L"PeakGuardMeter";
     meterClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     meterClass.hbrBackground = g_panelBrush;
     if (!RegisterClassW(&meterClass)) {
@@ -1674,7 +1674,7 @@ bool RegisterWindowClasses() {
     WNDCLASSW sliderClass{};
     sliderClass.lpfnWndProc = SliderProc;
     sliderClass.hInstance = g_instance;
-    sliderClass.lpszClassName = L"CodexLimiterSlider";
+    sliderClass.lpszClassName = L"PeakGuardSlider";
     sliderClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     sliderClass.hbrBackground = g_windowBrush;
     if (!RegisterClassW(&sliderClass)) {
@@ -1684,7 +1684,7 @@ bool RegisterWindowClasses() {
     WNDCLASSW overlayClass{};
     overlayClass.lpfnWndProc = OverlayProc;
     overlayClass.hInstance = g_instance;
-    overlayClass.lpszClassName = L"CodexLimiterOverlay";
+    overlayClass.lpszClassName = L"PeakGuardOverlay";
     overlayClass.hCursor = LoadCursorW(nullptr, IDC_ARROW);
     overlayClass.hbrBackground = g_panelBrush;
     return RegisterClassW(&overlayClass) != 0;
@@ -1751,7 +1751,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     g_settings.startWithWindows = IsStartWithWindowsEnabled();
     ApplyHotkeysFromSettings();
     if (g_state != nullptr) {
-        CodexLimiter::ApplySettings(g_state, g_settings);
+        PeakGuard::ApplySettings(g_state, g_settings);
     }
 
     if (!RegisterWindowClasses()) {
@@ -1767,7 +1767,7 @@ int WINAPI wWinMain(HINSTANCE instance, HINSTANCE, PWSTR commandLine, int) {
     g_window = CreateWindowExW(
         WS_EX_APPWINDOW,
         kMainWindowClassName,
-        L"Codex Limiter",
+        L"PeakGuard",
         WS_OVERLAPPEDWINDOW,
         initialX,
         initialY,

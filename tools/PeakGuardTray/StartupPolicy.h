@@ -2,14 +2,14 @@
 
 #include <string>
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 inline std::wstring StartupRegistryValueName() {
-    return L"CodexLimiter";
+    return L"PeakGuard";
 }
 
 inline std::wstring QuoteStartupCommand(const std::wstring& executablePath) {
     return L"\"" + executablePath + L"\"";
 }
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

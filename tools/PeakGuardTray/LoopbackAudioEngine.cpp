@@ -16,7 +16,7 @@
 #pragma comment(lib, "mmdevapi.lib")
 #pragma comment(lib, "oleaut32.lib")
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 namespace {
 
@@ -347,7 +347,7 @@ LoopbackAudioEngine::~LoopbackAudioEngine() {
     DeleteCriticalSection(&deviceNameLock_);
 }
 
-bool LoopbackAudioEngine::Start(LimiterSharedState* state) {
+bool LoopbackAudioEngine::Start(PeakGuardSharedState* state) {
     if (state == nullptr) return false;
     if (audioThread_ != nullptr) return true;
 
@@ -925,4 +925,4 @@ void LoopbackAudioEngine::ProcessAudio(float* frames, UINT32 frameCount, UINT32 
     }
 }
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

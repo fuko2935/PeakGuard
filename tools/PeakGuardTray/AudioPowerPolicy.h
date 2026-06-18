@@ -3,7 +3,7 @@
 #include <windows.h>
 #include <audioclient.h>
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 constexpr DWORD CaptureStreamFlags() {
     return AUDCLNT_STREAMFLAGS_EVENTCALLBACK | AUDCLNT_STREAMFLAGS_LOOPBACK;
@@ -33,4 +33,4 @@ constexpr int UiWindowMinHeightPx() {
     return 440;
 }
 
-} // namespace CodexLimiter
+} // namespace PeakGuard

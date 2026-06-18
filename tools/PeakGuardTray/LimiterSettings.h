@@ -2,9 +2,9 @@
 
 #include <windows.h>
 
-#include "common/LimiterSharedState.h"
+#include "common/PeakGuardSharedState.h"
 
-namespace CodexLimiter {
+namespace PeakGuard {
 
 enum class LimiterSettingsTab {
     Limiter = 0,
@@ -28,7 +28,7 @@ struct LimiterSettings {
     UINT raiseBoostHotkey = VK_F7;
 };
 
-inline void ApplySettings(LimiterSharedState* state, const LimiterSettings& settings) {
+inline void ApplySettings(PeakGuardSharedState* state, const LimiterSettings& settings) {
     if (state == nullptr) {
         return;
     }
@@ -39,7 +39,7 @@ inline void ApplySettings(LimiterSharedState* state, const LimiterSettings& sett
     SetBoostMilliDb(state, settings.boostMilliDb);
 }
 
-inline LimiterSettings ReadSettingsFromState(const LimiterSharedState* state) {
+inline LimiterSettings ReadSettingsFromState(const PeakGuardSharedState* state) {
     LimiterSettings settings{};
     if (state == nullptr) {
         return settings;
@@ -52,4 +52,4 @@ inline LimiterSettings ReadSettingsFromState(const LimiterSharedState* state) {
     return settings;
 }
 
-} // namespace CodexLimiter
+} // namespace PeakGuard
