@@ -1,1 +1,23 @@
+# Local worktrees
 .worktrees/
+
+# Build outputs
+build/
+out/
+bin/
+obj/
+*.user
+*.suo
+*.vcxproj.user
+*.log
+*.etl
+*.pdb
+*.ilk
+*.dll
+*.exe
+*.lib
+*.exp
+
+# Local machine state
+snapshots/
+nul
