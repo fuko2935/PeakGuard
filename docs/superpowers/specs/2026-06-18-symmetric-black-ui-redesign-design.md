@@ -1,5 +1,7 @@
 # Symmetric Black UI Redesign Design
 
+> Historical note: this document predates the PeakGuard rename. Current active commands and paths are documented in root `AGENTS.md` and `README.md`.
+
 ## Goal
 
 Redesign every visible Codex Limiter surface around a symmetric black Windows 11-style control experience while preserving power efficiency as the primary engineering constraint.

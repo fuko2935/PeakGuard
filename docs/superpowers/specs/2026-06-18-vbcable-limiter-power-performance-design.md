@@ -1,5 +1,7 @@
 # VB-CABLE Limiter Power and Performance Optimization Design
 
+> Historical note: this document predates the PeakGuard rename. Current active commands and paths are documented in root `AGENTS.md` and `README.md`.
+
 ## Goal
 
 Reduce Codex Limiter idle and active CPU overhead without changing the VB-CABLE routing model, limiter behavior, or output-device switching semantics.

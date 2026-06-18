@@ -1,5 +1,7 @@
 # Limiter Hotkey Overlay Design
 
+> Historical note: this document predates the PeakGuard rename. Current active commands and paths are documented in root `AGENTS.md` and `README.md`.
+
 ## Goal
 
 Add single-hand global keyboard control for the limiter and soundbooster, with a transient Windows-volume-style overlay whenever the shortcuts are used.

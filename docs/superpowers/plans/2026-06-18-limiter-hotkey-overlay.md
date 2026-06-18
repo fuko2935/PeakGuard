@@ -1,5 +1,7 @@
 # Limiter Hotkey Overlay Implementation Plan
 
+> Historical note: this document predates the PeakGuard rename. Current active commands and paths are documented in root `AGENTS.md` and `README.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add configurable global limiter and soundbooster controls with a transient Windows-volume-style overlay.

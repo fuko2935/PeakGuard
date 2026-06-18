@@ -1,5 +1,7 @@
 # Mainline Virtual Audio Maintenance Design
 
+> Historical note: this document predates the PeakGuard rename. Current active commands and paths are documented in root `AGENTS.md` and `README.md`.
+
 ## Goal
 
 Make `main` the real project branch for the VB-CABLE based Codex Limiter, retire the APO feasibility branch, and remove APO-era project clutter.

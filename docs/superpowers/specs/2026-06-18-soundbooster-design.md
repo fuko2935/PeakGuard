@@ -1,5 +1,7 @@
 # Soundbooster Design
 
+> Historical note: this document predates the PeakGuard rename. Current active commands and paths are documented in root `AGENTS.md` and `README.md`.
+
 ## Goal
 
 Add a user-controlled soundbooster to Codex Limiter so quiet content can be made louder while the existing limiter can still prevent excessive peaks. The feature stays in the current tray app and uses the existing VB-CABLE loopback audio path.
