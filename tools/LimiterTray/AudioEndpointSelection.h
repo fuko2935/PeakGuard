@@ -35,6 +35,14 @@ inline bool IsVirtualAudioEndpointName(const std::wstring& endpointName) {
         ContainsEndpointToken(name, L"codex limiter");
 }
 
+inline bool HasRestorableRenderEndpoint(const std::wstring& endpointId) {
+    return !endpointId.empty();
+}
+
+inline bool ShouldRestoreRenderEndpoint(DWORD waitResult, const std::wstring& endpointId) {
+    return waitResult == WAIT_OBJECT_0 && HasRestorableRenderEndpoint(endpointId);
+}
+
 inline bool IsFloatPcmFormat(const WAVEFORMATEX* format) {
     if (format == nullptr) {
         return false;

@@ -317,9 +317,17 @@ void LoopbackAudioEngine::Stop() {
         SetEvent(stopEvent_);
     }
 
-    WaitForSingleObject(audioThread_, 5000);
+    const DWORD waitResult = WaitForSingleObject(audioThread_, 5000);
     CloseHandle(audioThread_);
     audioThread_ = nullptr;
+
+    std::wstring endpointToRestore;
+    EnterCriticalSection(&deviceNameLock_);
+    endpointToRestore = preferredRenderDeviceId_;
+    LeaveCriticalSection(&deviceNameLock_);
+    if (ShouldRestoreRenderEndpoint(waitResult, endpointToRestore)) {
+        SetDefaultRenderEndpoint(endpointToRestore);
+    }
 
     if (stopEvent_ != nullptr) {
         CloseHandle(stopEvent_);

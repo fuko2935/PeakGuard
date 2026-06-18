@@ -58,6 +58,14 @@ int main() {
         "UI meter updates smoothly enough for live output");
     Expect(CodexLimiter::UiWindowHeightPx() >= 240,
         "main window leaves room for status text");
+    Expect(CodexLimiter::HasRestorableRenderEndpoint(L"{physical-render-endpoint-id}"),
+        "shutdown restores a remembered physical render endpoint");
+    Expect(!CodexLimiter::HasRestorableRenderEndpoint(L""),
+        "shutdown skips default restore without a remembered endpoint");
+    Expect(CodexLimiter::ShouldRestoreRenderEndpoint(WAIT_OBJECT_0, L"{physical-render-endpoint-id}"),
+        "shutdown restores only after the audio thread exits");
+    Expect(!CodexLimiter::ShouldRestoreRenderEndpoint(WAIT_TIMEOUT, L"{physical-render-endpoint-id}"),
+        "shutdown skips restore if the audio thread is still running");
 
     CodexLimiter::LimiterSettings settings{};
     settings.enabled = false;
