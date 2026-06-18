@@ -27,7 +27,16 @@ PeakGuard routes Windows system audio through VB-CABLE, captures it with WASAPI 
 
 ## Install
 
-Open PowerShell from the repository root:
+For end users, download and run the latest `PeakGuardSetup-*.exe` from GitHub Releases.
+
+The installer:
+
+- Installs PeakGuard to `%LOCALAPPDATA%\PeakGuard`.
+- Adds PeakGuard to Start Menu and Windows "Apps & features".
+- Can enable startup with Windows.
+- Can install VB-CABLE from the official driver package if it is missing.
+
+For development installs from the repository, open PowerShell from the repository root:
 
 ```powershell
 .\scripts\Install-PeakGuard.ps1 -Configuration Release
@@ -61,6 +70,22 @@ Requirements:
 cmake -S . -B build -A x64
 cmake --build build --config Debug
 cmake --build build --config Release --target PeakGuardTray
+```
+
+## Build Installer
+
+Requirements:
+
+- NSIS 3.x with `makensis.exe` on `PATH`
+
+```powershell
+.\scripts\Build-Installer.ps1 -Version 1.0.0 -Configuration Release
+```
+
+The installer is written to:
+
+```text
+out\PeakGuardSetup-1.0.0.exe
 ```
 
 ## Test

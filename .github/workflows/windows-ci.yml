@@ -26,3 +26,16 @@ jobs:
 
       - name: Build tray app
         run: cmake --build build --config Release --target PeakGuardTray
+
+      - name: Install NSIS
+        run: choco install nsis -y --no-progress
+
+      - name: Build installer
+        shell: pwsh
+        run: .\scripts\Build-Installer.ps1 -Version 1.0.0 -Configuration Release
+
+      - name: Upload installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: PeakGuardSetup
+          path: out/PeakGuardSetup-1.0.0.exe
