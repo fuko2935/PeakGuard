@@ -38,6 +38,11 @@ void PrintState(CodexLimiter::LimiterSharedState* state) {
         std::wcout << L"audioEngineState=" << AudioEngineStateName(state->audioEngineState) << L"\n";
         std::wcout << L"sampleRate=" << state->sampleRate << L"\n";
     }
+    if (state->version >= 3) {
+        std::wcout << L"boostEnabled=" << state->boostEnabled << L"\n";
+        std::wcout << L"boostMilliDb=" << state->boostMilliDb << L"\n";
+        std::wcout << L"boostLinearScaled=" << state->boostLinearScaled << L"\n";
+    }
 }
 
 bool TryParseLong(const wchar_t* value, LONG* result) {
@@ -66,6 +71,21 @@ int wmain(int argc, wchar_t** argv) {
             InterlockedExchange(const_cast<volatile LONG*>(&state->enabled), 1);
         } else if (arg == L"--disable") {
             InterlockedExchange(const_cast<volatile LONG*>(&state->enabled), 0);
+        } else if (arg == L"--boost-enable") {
+            InterlockedExchange(const_cast<volatile LONG*>(&state->boostEnabled), 1);
+        } else if (arg == L"--boost-disable") {
+            InterlockedExchange(const_cast<volatile LONG*>(&state->boostEnabled), 0);
+        } else if (arg == L"--boost-millidb") {
+            if (i + 1 >= argc) {
+                std::wcerr << L"--boost-millidb requires a value.\n";
+                return 2;
+            }
+            LONG value = 0;
+            if (!TryParseLong(argv[++i], &value)) {
+                std::wcerr << L"Invalid boost value.\n";
+                return 2;
+            }
+            CodexLimiter::SetBoostMilliDb(state, value);
         } else if (arg == L"--ceiling-millidb") {
             if (i + 1 >= argc) {
                 std::wcerr << L"--ceiling-millidb requires a value.\n";
