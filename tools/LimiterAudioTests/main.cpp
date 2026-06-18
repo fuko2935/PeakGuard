@@ -70,14 +70,43 @@ int main() {
     CodexLimiter::LimiterSettings settings{};
     settings.enabled = false;
     settings.ceilingMilliDb = -120000;
+    settings.boostEnabled = true;
+    settings.boostMilliDb = 25000;
     CodexLimiter::LimiterSharedState state{};
     CodexLimiter::InitializeStateFields(&state);
+    Expect(state.boostEnabled == 0, "shared state defaults booster off");
+    Expect(state.boostMilliDb == CodexLimiter::kDefaultBoostMilliDb,
+        "shared state defaults boost to 0 dB");
+    Expect(state.boostLinearScaled == CodexLimiter::BoostMilliDbToLinearScaled(CodexLimiter::kDefaultBoostMilliDb),
+        "shared state initializes linear boost");
+    Expect(CodexLimiter::ClampBoostMilliDb(-1000) == CodexLimiter::kMinBoostMilliDb,
+        "boost clamp rejects negative values");
+    Expect(CodexLimiter::ClampBoostMilliDb(0) == 0,
+        "boost clamp accepts 0 dB");
+    Expect(CodexLimiter::ClampBoostMilliDb(24000) == 24000,
+        "boost clamp accepts 24 dB");
+    Expect(CodexLimiter::ClampBoostMilliDb(25000) == CodexLimiter::kMaxBoostMilliDb,
+        "boost clamp rejects above-range values");
+    Expect(CodexLimiter::BoostMilliDbToLinearScaled(0) == CodexLimiter::kLinearScale,
+        "0 dB boost maps to unity gain");
+    Expect(CodexLimiter::BoostMilliDbToLinearScaled(24000) == 15848931925LL,
+        "24 dB boost maps to rounded 10^(24/20) scaled gain");
     CodexLimiter::ApplySettings(&state, settings);
     Expect(state.enabled == 0, "settings restore disabled state");
     Expect(state.ceilingMilliDb == CodexLimiter::kMinCeilingMilliDb,
         "settings restore clamps too-low ceiling");
     Expect(state.ceilingLinearScaled == CodexLimiter::MilliDbToLinearScaled(CodexLimiter::kMinCeilingMilliDb),
         "settings restore updates linear ceiling");
+    Expect(state.boostEnabled == 1, "settings restore enabled booster state");
+    Expect(state.boostMilliDb == CodexLimiter::kMaxBoostMilliDb,
+        "settings restore clamps too-high boost");
+    Expect(state.boostLinearScaled == CodexLimiter::BoostMilliDbToLinearScaled(CodexLimiter::kMaxBoostMilliDb),
+        "settings restore updates linear boost");
+
+    CodexLimiter::LimiterSettings readSettings = CodexLimiter::ReadSettingsFromState(&state);
+    Expect(readSettings.boostEnabled, "settings read returns booster enabled state");
+    Expect(readSettings.boostMilliDb == CodexLimiter::kMaxBoostMilliDb,
+        "settings read clamps boost value");
 
     if (failures != 0) {
         return 1;
