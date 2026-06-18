@@ -40,7 +40,7 @@ cmake --build build --config Debug --target LimiterAudioTests
 
 - Audio clients are initialized in `LoopbackAudioEngine::InitializeAudioClients`.
 - Device-change recovery is coordinated through `OnDefaultDeviceChanged`, `deviceChangedEvent_`, and the audio thread loop.
-- DSP lives in `LoopbackAudioEngine::ApplyLimiter`.
+- DSP lives in `LoopbackAudioEngine::ProcessAudio`.
 - Shared meter and engine state updates use `InterlockedExchange` and `InterlockedIncrement`.
 - The audio thread enables AVRT priority and SSE FTZ/DAZ handling before processing.
 
@@ -65,7 +65,7 @@ cmake --build build --config Debug --target LimiterAudioTests
 ## JIT Index Hints
 
 ```powershell
-rg -n "ApplyLimiter|InitializeAudioClients|ProcessCaptureBuffer|AudioThreadProc" .
+rg -n "ProcessAudio|InitializeAudioClients|ProcessCaptureBuffer|AudioThreadProc" .
 rg -n "Shell_NotifyIcon|WM_|WNDCLASSW|CreateWindowExW|SliderProc|MeterProc" .
 rg -n "IsVirtualAudioEndpointName|CaptureStreamFlags|ApplySettings" .
 rg -n "Interlocked|sharedState_|g_state" .
