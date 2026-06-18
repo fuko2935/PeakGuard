@@ -22,7 +22,7 @@ constexpr UINT UiUpdateIntervalMs() {
 }
 
 constexpr int UiWindowHeightPx() {
-    return 250;
+    return 320;
 }
 
 } // namespace CodexLimiter

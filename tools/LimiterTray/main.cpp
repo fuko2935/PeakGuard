@@ -35,6 +35,9 @@ constexpr int kIdMeter = 1003;
 constexpr int kIdPeakText = 1004;
 constexpr int kIdCeilingText = 1005;
 constexpr int kIdStatusText = 1006;
+constexpr int kIdBoostEnable = 1007;
+constexpr int kIdBoostSlider = 1008;
+constexpr int kIdBoostText = 1009;
 constexpr COLORREF kColorWindow = RGB(16, 18, 22);
 constexpr COLORREF kColorPanel = RGB(27, 30, 36);
 constexpr COLORREF kColorText = RGB(238, 241, 245);
@@ -49,6 +52,9 @@ CodexLimiter::LoopbackAudioEngine g_audioEngine;
 HWND g_window = nullptr;
 HWND g_enable = nullptr;
 HWND g_slider = nullptr;
+HWND g_boostEnable = nullptr;
+HWND g_boostSlider = nullptr;
+HWND g_boostText = nullptr;
 HWND g_meter = nullptr;
 HWND g_peakText = nullptr;
 HWND g_ceilingText = nullptr;
@@ -77,6 +83,12 @@ std::wstring FormatDb(LONG milliDb) {
 
     wchar_t buffer[64]{};
     swprintf_s(buffer, L"%.1f dBFS", static_cast<double>(milliDb) / 1000.0);
+    return buffer;
+}
+
+std::wstring FormatBoostDb(LONG milliDb) {
+    wchar_t buffer[64]{};
+    swprintf_s(buffer, L"+%.0f dB", static_cast<double>(CodexLimiter::ClampBoostMilliDb(milliDb)) / 1000.0);
     return buffer;
 }
 
@@ -189,6 +201,14 @@ int MilliDbToSliderPos(LONG milliDb) {
 
 LONG SliderPosToMilliDb(int position) {
     return CodexLimiter::ClampMilliDb(CodexLimiter::kMinCeilingMilliDb + (position * 1000));
+}
+
+int BoostMilliDbToSliderPos(LONG milliDb) {
+    return static_cast<int>(CodexLimiter::ClampBoostMilliDb(milliDb) / 1000);
+}
+
+LONG BoostSliderPosToMilliDb(int position) {
+    return CodexLimiter::ClampBoostMilliDb(position * 1000);
 }
 
 std::wstring ReadDefaultDeviceName();
@@ -329,10 +349,15 @@ void UpdateControls() {
         ? (L"Output: " + FormatDb(g_state->outputPeakMilliDb))
         : L"Output: inactive";
     const std::wstring ceilingText = L"Ceiling: " + FormatDb(ceiling);
+    const std::wstring boostText = L"Boost: " + FormatBoostDb(g_state->boostMilliDb);
     SetWindowTextW(g_peakText, peakText.c_str());
     SetWindowTextW(g_ceilingText, ceilingText.c_str());
+    SetWindowTextW(g_boostText, boostText.c_str());
     SendMessageW(g_enable, BM_SETCHECK, g_state->enabled ? BST_CHECKED : BST_UNCHECKED, 0);
+    SendMessageW(g_boostEnable, BM_SETCHECK, g_state->boostEnabled ? BST_CHECKED : BST_UNCHECKED, 0);
+    EnableWindow(g_boostSlider, g_state->boostEnabled != 0);
     InvalidateRect(g_slider, nullptr, FALSE);
+    InvalidateRect(g_boostSlider, nullptr, FALSE);
 
     std::wstring deviceName = g_audioEngine.GetDeviceName();
     if (deviceName.empty()) {
@@ -369,6 +394,28 @@ void AdjustCeilingByMilliDb(LONG deltaMilliDb) {
     UpdateControls();
 }
 
+void AdjustBoostByMilliDb(LONG deltaMilliDb) {
+    if (g_state == nullptr) {
+        g_mapping.Open();
+        g_state = g_mapping.Get();
+    }
+    if (g_state == nullptr) {
+        return;
+    }
+
+    LONG oldVal, newVal;
+    do {
+        oldVal = InterlockedCompareExchange(
+            const_cast<volatile LONG*>(&g_state->boostMilliDb), 0, 0);
+        newVal = CodexLimiter::ClampBoostMilliDb(oldVal + deltaMilliDb);
+    } while (InterlockedCompareExchange(
+        const_cast<volatile LONG*>(&g_state->boostMilliDb), newVal, oldVal) != oldVal);
+    InterlockedExchange64(const_cast<volatile LONGLONG*>(&g_state->boostLinearScaled),
+        CodexLimiter::BoostMilliDbToLinearScaled(newVal));
+    SaveSettings();
+    UpdateControls();
+}
+
 bool IsWindowOrChild(HWND parent, HWND candidate) {
     return candidate == parent || IsChild(parent, candidate);
 }
@@ -381,12 +428,21 @@ bool HandleWindowKey(MSG* message) {
         return false;
     }
 
+    const HWND focus = GetFocus();
     if (message->wParam == VK_LEFT) {
-        AdjustCeilingByMilliDb(-1000);
+        if (focus == g_boostSlider) {
+            AdjustBoostByMilliDb(-1000);
+        } else {
+            AdjustCeilingByMilliDb(-1000);
+        }
         return true;
     }
     if (message->wParam == VK_RIGHT) {
-        AdjustCeilingByMilliDb(1000);
+        if (focus == g_boostSlider) {
+            AdjustBoostByMilliDb(1000);
+        } else {
+            AdjustCeilingByMilliDb(1000);
+        }
         return true;
     }
     return false;
@@ -495,16 +551,48 @@ void SetCeilingFromSliderX(HWND window, int x) {
     UpdateControls();
 }
 
+int BoostSliderXToPosition(HWND window, int x) {
+    RECT rect{};
+    GetClientRect(window, &rect);
+    const int left = 12;
+    const int right = std::max(left + 1, static_cast<int>(rect.right) - 12);
+    x = std::max(left, std::min(right, x));
+    const double normalized = static_cast<double>(x - left) / static_cast<double>(right - left);
+    return static_cast<int>(normalized * 24.0 + 0.5);
+}
+
+void SetBoostFromSliderX(HWND window, int x) {
+    if (g_state == nullptr) {
+        g_mapping.Open();
+        g_state = g_mapping.Get();
+    }
+    if (g_state == nullptr) {
+        return;
+    }
+
+    CodexLimiter::SetBoostMilliDb(g_state, BoostSliderPosToMilliDb(BoostSliderXToPosition(window, x)));
+    SaveSettings();
+    UpdateControls();
+}
+
 LRESULT CALLBACK SliderProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
     switch (message) {
     case WM_LBUTTONDOWN:
         SetFocus(window);
         SetCapture(window);
-        SetCeilingFromSliderX(window, GET_X_LPARAM(lParam));
+        if (window == g_boostSlider) {
+            SetBoostFromSliderX(window, GET_X_LPARAM(lParam));
+        } else {
+            SetCeilingFromSliderX(window, GET_X_LPARAM(lParam));
+        }
         return 0;
     case WM_MOUSEMOVE:
         if ((wParam & MK_LBUTTON) != 0 && GetCapture() == window) {
-            SetCeilingFromSliderX(window, GET_X_LPARAM(lParam));
+            if (window == g_boostSlider) {
+                SetBoostFromSliderX(window, GET_X_LPARAM(lParam));
+            } else {
+                SetCeilingFromSliderX(window, GET_X_LPARAM(lParam));
+            }
             return 0;
         }
         break;
@@ -512,15 +600,27 @@ LRESULT CALLBACK SliderProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
         if (GetCapture() == window) {
             ReleaseCapture();
         }
-        SetCeilingFromSliderX(window, GET_X_LPARAM(lParam));
+        if (window == g_boostSlider) {
+            SetBoostFromSliderX(window, GET_X_LPARAM(lParam));
+        } else {
+            SetCeilingFromSliderX(window, GET_X_LPARAM(lParam));
+        }
         return 0;
     case WM_KEYDOWN:
         if (wParam == VK_LEFT) {
-            AdjustCeilingByMilliDb(-1000);
+            if (window == g_boostSlider) {
+                AdjustBoostByMilliDb(-1000);
+            } else {
+                AdjustCeilingByMilliDb(-1000);
+            }
             return 0;
         }
         if (wParam == VK_RIGHT) {
-            AdjustCeilingByMilliDb(1000);
+            if (window == g_boostSlider) {
+                AdjustBoostByMilliDb(1000);
+            } else {
+                AdjustCeilingByMilliDb(1000);
+            }
             return 0;
         }
         break;
@@ -540,16 +640,19 @@ LRESULT CALLBACK SliderProc(HWND window, UINT message, WPARAM wParam, LPARAM lPa
 
         FillRect(dc, &rail, g_railBrush);
 
-        LONG ceiling = g_state != nullptr ? g_state->ceilingMilliDb : CodexLimiter::kDefaultCeilingMilliDb;
-        const int position = MilliDbToSliderPos(ceiling);
-        const int knobX = left + static_cast<int>((static_cast<double>(position) / 75.0) * (right - left));
+        const bool isBoostSlider = window == g_boostSlider;
+        const int maxPosition = isBoostSlider ? 24 : 75;
+        const int position = isBoostSlider
+            ? BoostMilliDbToSliderPos(g_state != nullptr ? g_state->boostMilliDb : CodexLimiter::kDefaultBoostMilliDb)
+            : MilliDbToSliderPos(g_state != nullptr ? g_state->ceilingMilliDb : CodexLimiter::kDefaultCeilingMilliDb);
+        const int knobX = left + static_cast<int>((static_cast<double>(position) / static_cast<double>(maxPosition)) * (right - left));
 
         RECT active{ left, rail.top, knobX, rail.bottom };
         FillRect(dc, &active, g_activeBrush);
 
         HGDIOBJ oldPen = SelectObject(dc, g_tickPen);
-        for (int i = 0; i <= 75; i += 5) {
-            const int x = left + static_cast<int>((static_cast<double>(i) / 75.0) * (right - left));
+        for (int i = 0; i <= maxPosition; i += (isBoostSlider ? 4 : 5)) {
+            const int x = left + static_cast<int>((static_cast<double>(i) / static_cast<double>(maxPosition)) * (right - left));
             MoveToEx(dc, x, centerY + 12, nullptr);
             LineTo(dc, x, centerY + 17);
         }
@@ -607,8 +710,16 @@ void CreateControls(HWND window) {
 
     g_enable = CreateWindowExW(0, L"BUTTON", L"Limiter enabled", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
         16, 128, 160, 24, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdEnable)), g_instance, nullptr);
+
+    g_boostEnable = CreateWindowExW(0, L"BUTTON", L"Soundbooster enabled", WS_CHILD | WS_VISIBLE | BS_AUTOCHECKBOX,
+        16, 160, 190, 24, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBoostEnable)), g_instance, nullptr);
+    g_boostText = CreateWindowExW(0, L"STATIC", L"Boost: +0 dB", WS_CHILD | WS_VISIBLE,
+        16, 192, 310, 20, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBoostText)), g_instance, nullptr);
+    g_boostSlider = CreateWindowExW(0, L"CodexLimiterSlider", nullptr, WS_CHILD | WS_VISIBLE | WS_TABSTOP,
+        16, 216, 310, 34, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdBoostSlider)), g_instance, nullptr);
+
     g_statusText = CreateWindowExW(0, L"STATIC", L"Status: starting", WS_CHILD | WS_VISIBLE,
-        16, 156, 320, 20, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStatusText)), g_instance, nullptr);
+        16, 260, 320, 40, window, reinterpret_cast<HMENU>(static_cast<INT_PTR>(kIdStatusText)), g_instance, nullptr);
 }
 
 LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM lParam) {
@@ -648,6 +759,13 @@ LRESULT CALLBACK MainWindowProc(HWND window, UINT message, WPARAM wParam, LPARAM
         if (LOWORD(wParam) == kIdEnable && g_state != nullptr) {
             const bool checked = SendMessageW(g_enable, BM_GETCHECK, 0, 0) == BST_CHECKED;
             InterlockedExchange(const_cast<volatile LONG*>(&g_state->enabled), checked ? 1 : 0);
+            SaveSettings();
+            UpdateControls();
+            return 0;
+        }
+        if (LOWORD(wParam) == kIdBoostEnable && g_state != nullptr) {
+            const bool checked = SendMessageW(g_boostEnable, BM_GETCHECK, 0, 0) == BST_CHECKED;
+            InterlockedExchange(const_cast<volatile LONG*>(&g_state->boostEnabled), checked ? 1 : 0);
             SaveSettings();
             UpdateControls();
             return 0;
