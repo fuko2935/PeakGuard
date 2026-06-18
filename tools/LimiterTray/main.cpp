@@ -150,6 +150,10 @@ CodexLimiter::LimiterSettings LoadSettings() {
             settings.enabled = parsed != 0;
         } else if (key == "ceilingMilliDb" && TryParseLong(value, &parsed)) {
             settings.ceilingMilliDb = CodexLimiter::ClampMilliDb(parsed);
+        } else if (key == "boostEnabled" && TryParseLong(value, &parsed)) {
+            settings.boostEnabled = parsed != 0;
+        } else if (key == "boostMilliDb" && TryParseLong(value, &parsed)) {
+            settings.boostMilliDb = CodexLimiter::ClampBoostMilliDb(parsed);
         }
     }
 
@@ -174,6 +178,8 @@ void SaveSettings() {
 
     file << "enabled=" << (settings.enabled ? 1 : 0) << "\n";
     file << "ceilingMilliDb=" << settings.ceilingMilliDb << "\n";
+    file << "boostEnabled=" << (settings.boostEnabled ? 1 : 0) << "\n";
+    file << "boostMilliDb=" << settings.boostMilliDb << "\n";
 }
 
 int MilliDbToSliderPos(LONG milliDb) {
