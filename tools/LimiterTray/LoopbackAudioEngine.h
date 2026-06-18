@@ -2,6 +2,7 @@
 
 #include <windows.h>
 #include <audioclient.h>
+#include <endpointvolume.h>
 #include <mmdeviceapi.h>
 #include <avrt.h>
 #include <wrl/client.h>
@@ -37,6 +38,7 @@ private:
 
     void AudioThreadProc();
     void ProcessCaptureBuffer();
+    void SyncEndpointVolume(bool force = false);
 
     void ProcessAudio(float* frames, UINT32 frameCount, UINT32 channels);
     void SetSharedState(AudioEngineState newState);
@@ -52,6 +54,8 @@ private:
     Microsoft::WRL::ComPtr<IAudioClient> renderClient_;
     Microsoft::WRL::ComPtr<IAudioCaptureClient> capture_;
     Microsoft::WRL::ComPtr<IAudioRenderClient> render_;
+    Microsoft::WRL::ComPtr<IAudioEndpointVolume> virtualRenderVolume_;
+    Microsoft::WRL::ComPtr<IAudioEndpointVolume> physicalRenderVolume_;
 
     HANDLE stopEvent_ = nullptr;
     HANDLE deviceChangedEvent_ = nullptr;
@@ -70,6 +74,9 @@ private:
     float limiterGain_ = 1.0f;
 
     UINT32 consecutiveSilentBuffers_ = 0;
+    DWORD lastVolumeSyncTick_ = 0;
+    float lastSyncedVolume_ = -1.0f;
+    BOOL lastSyncedMute_ = FALSE;
     static constexpr UINT32 kSilenceThreshold = 50;
     static constexpr float kSilencePeakThreshold = 0.0001f;
 

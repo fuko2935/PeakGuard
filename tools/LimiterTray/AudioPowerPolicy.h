@@ -22,7 +22,15 @@ constexpr UINT UiUpdateIntervalMs() {
 }
 
 constexpr int UiWindowHeightPx() {
-    return 320;
+    return 460;
+}
+
+constexpr int UiWindowMinWidthPx() {
+    return 460;
+}
+
+constexpr int UiWindowMinHeightPx() {
+    return 440;
 }
 
 } // namespace CodexLimiter

@@ -21,6 +21,9 @@ Parent context: See `../AGENTS.md`.
 # Build/install Release app, create shortcut, launch tray
 .\scripts\Install-CodexLimiter.ps1 -Configuration Release
 
+# After rebuilding LimiterTray, rerun install to refresh the Start Menu/startup copy
+.\scripts\Install-CodexLimiter.ps1 -Configuration Release
+
 # Also enable HKCU startup
 .\scripts\Install-CodexLimiter.ps1 -Configuration Release -EnableStartup
 
@@ -55,7 +58,8 @@ rg -n "cmake|vswhere|Configuration|EnableStartup" .
 
 - `Install-CodexLimiter.ps1` stops existing `LimiterTray` processes before launching the installed copy.
 - `Uninstall-CodexLimiter.ps1` recursively removes `%LOCALAPPDATA%\\CodexLimiter`.
-- The installer's direct project build path is `build/LimiterTray`, while the root README build path is `build`.
+- The Start Menu shortcut and HKCU startup entry run `%LOCALAPPDATA%\\CodexLimiter\\LimiterTray.exe`, not the repo build output.
+- Rerun `.\scripts\Install-CodexLimiter.ps1 -Configuration Release` after Release tray changes so Start Menu/startup uses the updated binary.
 
 ## Pre-PR Checks
 

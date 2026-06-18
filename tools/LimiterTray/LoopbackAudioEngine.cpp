@@ -1,3 +1,4 @@
+#define INITGUID
 #include "LoopbackAudioEngine.h"
 
 #include "AudioEndpointSelection.h"
@@ -63,6 +64,26 @@ std::wstring GetDeviceFriendlyName(IMMDevice* device) {
     return L"<unnamed>";
 }
 
+int GetEndpointFormFactor(IMMDevice* device) {
+    if (device == nullptr) return UnknownFormFactor;
+
+    Microsoft::WRL::ComPtr<IPropertyStore> store;
+    HRESULT hr = device->OpenPropertyStore(STGM_READ, &store);
+    if (FAILED(hr)) return UnknownFormFactor;
+
+    PROPVARIANT value;
+    PropVariantInit(&value);
+    hr = store->GetValue(PKEY_AudioEndpoint_FormFactor, &value);
+    int formFactor = UnknownFormFactor;
+    if (SUCCEEDED(hr)) {
+        if (value.vt == VT_UI4 || value.vt == VT_I4) {
+            formFactor = static_cast<int>(value.ulVal);
+        }
+    }
+    PropVariantClear(&value);
+    return formFactor;
+}
+
 bool FindDefaultDevice(
     IMMDeviceEnumerator* enumerator,
     EDataFlow flow,
@@ -95,11 +116,61 @@ bool FindDeviceById(
     if (FAILED(device->GetState(&state)) || state != DEVICE_STATE_ACTIVE) return false;
 
     std::wstring name = GetDeviceFriendlyName(device.Get());
-    if (IsVirtualAudioEndpointName(name)) return false;
+    if (PhysicalRenderEndpointScore(name, GetEndpointFormFactor(device.Get())) <= 0) return false;
 
     *selected = device;
     if (selectedName != nullptr) {
         *selectedName = name;
+    }
+    return true;
+}
+
+bool IsActivePhysicalRenderEndpoint(IMMDevice* device, std::wstring* name, int* score) {
+    if (device == nullptr) return false;
+
+    DWORD state = 0;
+    if (FAILED(device->GetState(&state)) || !IsActiveEndpointState(state)) return false;
+
+    Microsoft::WRL::ComPtr<IMMEndpoint> endpoint;
+    if (FAILED(device->QueryInterface(IID_PPV_ARGS(&endpoint)))) return false;
+
+    EDataFlow flow{};
+    if (FAILED(endpoint->GetDataFlow(&flow)) || flow != eRender) return false;
+
+    std::wstring friendlyName = GetDeviceFriendlyName(device);
+    const int endpointScore = PhysicalRenderEndpointScore(friendlyName, GetEndpointFormFactor(device));
+    if (endpointScore <= 0) return false;
+
+    if (name != nullptr) {
+        *name = friendlyName;
+    }
+    if (score != nullptr) {
+        *score = endpointScore;
+    }
+    return true;
+}
+
+bool FindActivePhysicalRenderEndpointById(
+    IMMDeviceEnumerator* enumerator,
+    LPCWSTR deviceId,
+    std::wstring* selectedId,
+    std::wstring* selectedName,
+    int* selectedScore) {
+    if (enumerator == nullptr || deviceId == nullptr || selectedId == nullptr) return false;
+
+    Microsoft::WRL::ComPtr<IMMDevice> device;
+    if (FAILED(enumerator->GetDevice(deviceId, &device))) return false;
+
+    std::wstring name;
+    int score = 0;
+    if (!IsActivePhysicalRenderEndpoint(device.Get(), &name, &score)) return false;
+
+    *selectedId = deviceId;
+    if (selectedName != nullptr) {
+        *selectedName = name;
+    }
+    if (selectedScore != nullptr) {
+        *selectedScore = score;
     }
     return true;
 }
@@ -193,6 +264,15 @@ bool SetDefaultRenderEndpoint(const std::wstring& endpointId) {
     return ok;
 }
 
+Microsoft::WRL::ComPtr<IAudioEndpointVolume> ActivateEndpointVolume(IMMDevice* device) {
+    Microsoft::WRL::ComPtr<IAudioEndpointVolume> volume;
+    if (device == nullptr) return volume;
+
+    device->Activate(__uuidof(IAudioEndpointVolume), CLSCTX_ALL, nullptr,
+        reinterpret_cast<void**>(volume.GetAddressOf()));
+    return volume;
+}
+
 bool FindPhysicalRenderDevice(
     IMMDeviceEnumerator* enumerator,
     const std::wstring& preferredDeviceId,
@@ -205,7 +285,7 @@ bool FindPhysicalRenderDevice(
     Microsoft::WRL::ComPtr<IMMDevice> defaultRender;
     if (FindDefaultDevice(enumerator, eRender, &defaultRender)) {
         std::wstring name = GetDeviceFriendlyName(defaultRender.Get());
-        if (!IsVirtualAudioEndpointName(name)) {
+        if (PhysicalRenderEndpointScore(name, GetEndpointFormFactor(defaultRender.Get())) > 0) {
             *selected = defaultRender;
             *selectedName = name;
             return true;
@@ -219,19 +299,27 @@ bool FindPhysicalRenderDevice(
     UINT count = 0;
     if (FAILED(collection->GetCount(&count))) return false;
 
+    int bestScore = 0;
+    Microsoft::WRL::ComPtr<IMMDevice> bestDevice;
+    std::wstring bestName;
     for (UINT i = 0; i < count; ++i) {
         Microsoft::WRL::ComPtr<IMMDevice> device;
         if (FAILED(collection->Item(i, &device))) continue;
 
         std::wstring name = GetDeviceFriendlyName(device.Get());
-        if (!IsVirtualAudioEndpointName(name)) {
-            *selected = device;
-            *selectedName = name;
-            return true;
+        const int score = PhysicalRenderEndpointScore(name, GetEndpointFormFactor(device.Get()));
+        if (score > bestScore) {
+            bestScore = score;
+            bestDevice = device;
+            bestName = name;
         }
     }
 
-    return false;
+    if (bestDevice == nullptr) return false;
+
+    *selected = bestDevice;
+    *selectedName = bestName;
+    return true;
 }
 
 void SetDeviceName(CRITICAL_SECTION* lock, std::wstring* target, const std::wstring& value) {
@@ -358,19 +446,32 @@ bool LoopbackAudioEngine::IsRunning() const {
 }
 
 void LoopbackAudioEngine::OnDefaultDeviceChanged(LPCWSTR deviceId) {
+    bool shouldReinitialize = false;
     if (deviceId != nullptr && enumerator_ != nullptr) {
-        Microsoft::WRL::ComPtr<IMMDevice> device;
-        if (SUCCEEDED(enumerator_->GetDevice(deviceId, &device))) {
-            std::wstring name = GetDeviceFriendlyName(device.Get());
-            if (!IsVirtualAudioEndpointName(name)) {
-                EnterCriticalSection(&deviceNameLock_);
-                preferredRenderDeviceId_ = deviceId;
-                LeaveCriticalSection(&deviceNameLock_);
+        std::wstring endpointId;
+        std::wstring endpointName;
+        int endpointScore = 0;
+        if (FindActivePhysicalRenderEndpointById(enumerator_.Get(), deviceId, &endpointId, &endpointName, &endpointScore)) {
+            std::wstring currentPreferredId;
+            EnterCriticalSection(&deviceNameLock_);
+            currentPreferredId = preferredRenderDeviceId_;
+            LeaveCriticalSection(&deviceNameLock_);
+            if (!currentPreferredId.empty() && endpointScore < 250) {
+                return;
             }
+            EnterCriticalSection(&deviceNameLock_);
+            preferredRenderDeviceId_ = endpointId;
+            LeaveCriticalSection(&deviceNameLock_);
+            shouldReinitialize = true;
         }
     }
-    deviceChanged_ = true;
-    if (deviceChangedEvent_ != nullptr) {
+    if (deviceId == nullptr) {
+        shouldReinitialize = true;
+    }
+    if (shouldReinitialize) {
+        deviceChanged_ = true;
+    }
+    if (shouldReinitialize && deviceChangedEvent_ != nullptr) {
         SetEvent(deviceChangedEvent_);
     }
 }
@@ -435,9 +536,23 @@ bool LoopbackAudioEngine::InitializeAudioClients() {
         SetSharedState(AudioEngineState::Error);
         return false;
     }
+    if (preferredId.empty()) {
+        const std::wstring selectedRenderId = GetDeviceId(renderDevice.Get());
+        if (!selectedRenderId.empty()) {
+            EnterCriticalSection(&deviceNameLock_);
+            preferredRenderDeviceId_ = selectedRenderId;
+            LeaveCriticalSection(&deviceNameLock_);
+        }
+    }
 
     SetDeviceName(&deviceNameLock_, &deviceName_,
         L"Virtual loopback: " + virtualRenderName + L" -> Output: " + renderName);
+    virtualRenderVolume_ = ActivateEndpointVolume(virtualRenderDevice.Get());
+    physicalRenderVolume_ = ActivateEndpointVolume(renderDevice.Get());
+    lastSyncedVolume_ = -1.0f;
+    lastSyncedMute_ = FALSE;
+    lastVolumeSyncTick_ = 0;
+    SyncEndpointVolume(true);
 
     hr = virtualRenderDevice->Activate(__uuidof(IAudioClient), CLSCTX_ALL,
         nullptr, reinterpret_cast<void**>(captureClient_.GetAddressOf()));
@@ -549,6 +664,8 @@ void LoopbackAudioEngine::ShutdownAudioClients() {
 
     capture_.Reset();
     render_.Reset();
+    virtualRenderVolume_.Reset();
+    physicalRenderVolume_.Reset();
     captureClient_.Reset();
     renderClient_.Reset();
     enumerator_.Reset();
@@ -561,6 +678,39 @@ void LoopbackAudioEngine::ShutdownAudioClients() {
     captureFormatIsFloat_ = false;
     captureBufferFrames_ = 0;
     renderBufferFrames_ = 0;
+    lastVolumeSyncTick_ = 0;
+    lastSyncedVolume_ = -1.0f;
+    lastSyncedMute_ = FALSE;
+}
+
+void LoopbackAudioEngine::SyncEndpointVolume(bool force) {
+    if (virtualRenderVolume_ == nullptr || physicalRenderVolume_ == nullptr) {
+        return;
+    }
+
+    const DWORD now = GetTickCount();
+    if (!force && now - lastVolumeSyncTick_ < 250) {
+        return;
+    }
+    lastVolumeSyncTick_ = now;
+
+    float volume = 0.0f;
+    BOOL mute = FALSE;
+    if (FAILED(virtualRenderVolume_->GetMasterVolumeLevelScalar(&volume)) ||
+        FAILED(virtualRenderVolume_->GetMute(&mute))) {
+        return;
+    }
+
+    if (force || std::fabs(volume - lastSyncedVolume_) > 0.005f) {
+        if (SUCCEEDED(physicalRenderVolume_->SetMasterVolumeLevelScalar(volume, nullptr))) {
+            lastSyncedVolume_ = volume;
+        }
+    }
+    if (force || mute != lastSyncedMute_) {
+        if (SUCCEEDED(physicalRenderVolume_->SetMute(mute, nullptr))) {
+            lastSyncedMute_ = mute;
+        }
+    }
 }
 
 void LoopbackAudioEngine::AudioThreadProc() {
@@ -596,6 +746,7 @@ void LoopbackAudioEngine::AudioThreadProc() {
     HANDLE waitHandles[3] = { stopEvent_, deviceChangedEvent_, captureReadyEvent_ };
 
     while (!stopRequested_.load()) {
+        SyncEndpointVolume();
         if (deviceChanged_.load()) {
             ShutdownAudioClients();
             deviceChanged_ = false;

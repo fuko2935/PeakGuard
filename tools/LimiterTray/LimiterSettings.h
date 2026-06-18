@@ -6,11 +6,26 @@
 
 namespace CodexLimiter {
 
+enum class LimiterSettingsTab {
+    Limiter = 0,
+    Hotkeys = 1,
+    Startup = 2,
+    Power = 3,
+};
+
 struct LimiterSettings {
     bool enabled = true;
     LONG ceilingMilliDb = kDefaultCeilingMilliDb;
     bool boostEnabled = false;
     LONG boostMilliDb = kDefaultBoostMilliDb;
+    bool overlayEnabled = true;
+    bool startWithWindows = false;
+    LimiterSettingsTab selectedTab = LimiterSettingsTab::Limiter;
+    UINT lowerCeilingHotkey = 'A';
+    UINT raiseCeilingHotkey = 'D';
+    UINT toggleLimiterHotkey = 'S';
+    UINT lowerBoostHotkey = VK_F6;
+    UINT raiseBoostHotkey = VK_F7;
 };
 
 inline void ApplySettings(LimiterSharedState* state, const LimiterSettings& settings) {

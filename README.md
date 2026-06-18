@@ -36,6 +36,8 @@ cmake --build build --config Debug --target LimiterAudioTests
 .\scripts\Install-CodexLimiter.ps1 -Configuration Release
 ```
 
+The Start Menu shortcut and optional Windows startup entry run the installed copy under `%LOCALAPPDATA%\CodexLimiter`. After changing code and rebuilding `LimiterTray`, run the install command again to refresh that installed copy.
+
 ## Uninstall
 
 ```powershell

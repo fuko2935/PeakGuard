@@ -32,6 +32,7 @@ cmake --build build --config Debug --target LimiterAudioTests
 - DO: Follow audio lifecycle boundaries in `LoopbackAudioEngine.h` and `LoopbackAudioEngine.cpp`.
 - DO: Keep endpoint-name policy in `AudioEndpointSelection.h`; tests already exercise these helpers.
 - DO: Keep stream flags, wait interval, and UI timing policy in `AudioPowerPolicy.h`.
+- DO: Keep hotkey and startup registry policy in `HotkeyPolicy.h` and `StartupPolicy.h`; tests should cover these contracts.
 - DO: Keep persisted settings translation in `LimiterSettings.h` and file I/O in `main.cpp`.
 - MUST NOT: Use microphone capture for the limiter path; `LimiterAudioTests/main.cpp` expects render loopback flags.
 - MUST NOT: Write settings or call shell APIs from `LoopbackAudioEngine::AudioThreadProc`.
@@ -58,7 +59,9 @@ cmake --build build --config Debug --target LimiterAudioTests
 - Audio routing and limiter: `LoopbackAudioEngine.cpp`.
 - Endpoint selection helpers: `AudioEndpointSelection.h`.
 - Audio timing and stream policy: `AudioPowerPolicy.h`.
+- Hotkey policy: `HotkeyPolicy.h`.
 - Settings helpers: `LimiterSettings.h`.
+- Startup policy: `StartupPolicy.h`.
 - Resources: `LimiterTray.rc`, `resource.h`, `app.ico`.
 - Build target: `CMakeLists.txt`.
 
@@ -67,7 +70,7 @@ cmake --build build --config Debug --target LimiterAudioTests
 ```powershell
 rg -n "ProcessAudio|InitializeAudioClients|ProcessCaptureBuffer|AudioThreadProc" .
 rg -n "Shell_NotifyIcon|WM_|WNDCLASSW|CreateWindowExW|SliderProc|MeterProc" .
-rg -n "IsVirtualAudioEndpointName|CaptureStreamFlags|ApplySettings" .
+rg -n "IsVirtualAudioEndpointName|CaptureStreamFlags|ApplySettings|LimiterHotkey|StartupRegistry" .
 rg -n "Interlocked|sharedState_|g_state" .
 ```
 

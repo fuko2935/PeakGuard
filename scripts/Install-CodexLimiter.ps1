@@ -14,7 +14,10 @@ param(
 $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
-$exeSource = Join-Path $repoRoot "build/LimiterTray/$Configuration/LimiterTray.exe"
+$rootBuildDir = Join-Path $repoRoot 'build'
+$directBuildDir = Join-Path $repoRoot 'build/LimiterTray'
+$rootBuildExe = Join-Path $rootBuildDir "tools/LimiterTray/$Configuration/LimiterTray.exe"
+$directBuildExe = Join-Path $directBuildDir "$Configuration/LimiterTray.exe"
 $installDir = Join-Path $env:LOCALAPPDATA 'CodexLimiter'
 $exeDest = Join-Path $installDir 'LimiterTray.exe'
 $startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Codex Limiter'
@@ -25,14 +28,12 @@ $runValueName = 'CodexLimiter'
 function Resolve-RequiredPath {
     param([string]$Path, [string]$Description)
     if (-not (Test-Path -LiteralPath $Path)) {
-        throw "$Description not found: $Path. Build first with: cmake --build build/LimiterTray --config $Configuration"
+        throw "$Description not found: $Path. Build first with: cmake --build build --config $Configuration --target LimiterTray"
     }
     return (Resolve-Path -LiteralPath $Path).Path
 }
 
-# 1. Build if needed
-if (-not (Test-Path -LiteralPath $exeSource)) {
-    Write-Host "Building LimiterTray..."
+function Resolve-CMake {
     $cmake = Get-Command cmake -ErrorAction SilentlyContinue
     if ($null -eq $cmake) {
         # Try VS bundled cmake
@@ -47,14 +48,45 @@ if (-not (Test-Path -LiteralPath $exeSource)) {
     }
     if ($null -eq $cmake) { throw 'cmake not found. Install Visual Studio Build Tools or CMake.' }
 
-    $cmakeExe = if ($cmake.Source) { $cmake.Source } else { $cmake.Source }
-    & $cmakeExe -S (Join-Path $repoRoot 'tools/LimiterTray') -B (Join-Path $repoRoot 'build/LimiterTray') -A x64
-    & $cmakeExe --build (Join-Path $repoRoot 'build/LimiterTray') --config $Configuration
+    return $cmake.Source
 }
 
-Resolve-RequiredPath $exeSource 'LimiterTray.exe'
+function Stop-LimiterTray {
+    $processes = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+    if ($processes.Count -eq 0) {
+        return
+    }
+
+    if (Test-Path -LiteralPath $exeDest) {
+        Start-Process -FilePath $exeDest -ArgumentList '--quit' -WindowStyle Hidden
+    }
+
+    Start-Sleep -Milliseconds 2500
+    $remaining = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+    if ($remaining.Count -gt 0) {
+        $remaining | Stop-Process -Force
+        $remaining | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+    }
+}
+
+# 1. Build if needed. Prefer the root build tree used by README and AGENTS.md.
+if (-not (Test-Path -LiteralPath $rootBuildExe) -and -not (Test-Path -LiteralPath $directBuildExe)) {
+    Write-Host "Building LimiterTray..."
+    $cmakeExe = Resolve-CMake
+    & $cmakeExe -S $repoRoot -B $rootBuildDir -A x64
+    & $cmakeExe --build $rootBuildDir --config $Configuration --target LimiterTray
+}
+
+$exeSource = if (Test-Path -LiteralPath $rootBuildExe) {
+    $rootBuildExe
+} else {
+    $directBuildExe
+}
+
+$exeSource = Resolve-RequiredPath $exeSource 'LimiterTray.exe'
 
 # 2. Copy to install directory
+Stop-LimiterTray
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 Copy-Item -LiteralPath $exeSource -Destination $exeDest -Force
 Write-Host "Installed: $exeDest"
@@ -78,7 +110,6 @@ if ($EnableStartup) {
     Write-Host "Startup enabled: $runValueName"
 }
 
-# 5. Stop old instance and launch
-Get-Process LimiterTray -ErrorAction SilentlyContinue | Stop-Process -Force
+# 5. Launch
 Start-Process -FilePath $exeDest -ArgumentList '--show'
 Write-Host "Codex Limiter started."

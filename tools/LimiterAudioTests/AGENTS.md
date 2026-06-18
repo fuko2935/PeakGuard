@@ -9,7 +9,7 @@ Parent context: See `../../AGENTS.md` and `../AGENTS.md`.
 ## Package Rules
 
 - **MUST** keep tests deterministic and independent of live audio hardware.
-- **MUST** add expectations when changing pure helper behavior in `../LimiterTray/AudioEndpointSelection.h`, `../LimiterTray/AudioPowerPolicy.h`, `../LimiterTray/LimiterSettings.h`, or `../../common/LimiterSharedState.h`.
+- **MUST** add expectations when changing pure helper behavior in `../LimiterTray/AudioEndpointSelection.h`, `../LimiterTray/AudioPowerPolicy.h`, `../LimiterTray/HotkeyPolicy.h`, `../LimiterTray/LimiterSettings.h`, `../LimiterTray/StartupPolicy.h`, or `../../common/LimiterSharedState.h`.
 - **MUST** return nonzero on failure and print useful failure names.
 - **SHOULD** keep the lightweight `Expect` style unless a real test framework is introduced across the repo.
 
@@ -34,14 +34,16 @@ cmake --build build --config Debug --target LimiterAudioTests
 - Build target: `CMakeLists.txt`.
 - Endpoint helper under test: `../LimiterTray/AudioEndpointSelection.h`.
 - Power policy under test: `../LimiterTray/AudioPowerPolicy.h`.
+- Hotkey policy under test: `../LimiterTray/HotkeyPolicy.h`.
 - Settings helper under test: `../LimiterTray/LimiterSettings.h`.
+- Startup policy under test: `../LimiterTray/StartupPolicy.h`.
 - Shared state helper under test: `../../common/LimiterSharedState.h`.
 
 ## JIT Index Hints
 
 ```powershell
 rg -n "Expect\\(" .
-rg -n "MakeWaveFormat|LimiterSettings|InitializeStateFields" .
+rg -n "MakeWaveFormat|LimiterSettings|InitializeStateFields|LimiterHotkey|StartupRegistry" .
 rg -n "IsVirtualAudioEndpointName|IsFloatPcmFormat|CaptureStreamFlags" .
 ```
 

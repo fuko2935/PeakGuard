@@ -2,10 +2,13 @@
 #include <mmreg.h>
 
 #include <iostream>
+#include <string>
 
 #include "tools/LimiterTray/AudioEndpointSelection.h"
 #include "tools/LimiterTray/AudioPowerPolicy.h"
+#include "tools/LimiterTray/HotkeyPolicy.h"
 #include "tools/LimiterTray/LimiterSettings.h"
+#include "tools/LimiterTray/StartupPolicy.h"
 
 namespace {
 
@@ -58,6 +61,10 @@ int main() {
         "UI meter updates smoothly enough for live output");
     Expect(CodexLimiter::UiWindowHeightPx() >= 240,
         "main window leaves room for status text");
+    Expect(CodexLimiter::UiWindowMinWidthPx() >= 420,
+        "main window minimum width prevents text clipping");
+    Expect(CodexLimiter::UiWindowMinHeightPx() >= 420,
+        "main window minimum height prevents status clipping");
     Expect(CodexLimiter::HasRestorableRenderEndpoint(L"{physical-render-endpoint-id}"),
         "shutdown restores a remembered physical render endpoint");
     Expect(!CodexLimiter::HasRestorableRenderEndpoint(L""),
@@ -66,6 +73,86 @@ int main() {
         "shutdown restores only after the audio thread exits");
     Expect(!CodexLimiter::ShouldRestoreRenderEndpoint(WAIT_TIMEOUT, L"{physical-render-endpoint-id}"),
         "shutdown skips restore if the audio thread is still running");
+    Expect(CodexLimiter::IsActiveEndpointState(DEVICE_STATE_ACTIVE),
+        "active endpoint state can trigger output retargeting");
+    Expect(!CodexLimiter::IsActiveEndpointState(DEVICE_STATE_DISABLED),
+        "inactive endpoint states do not trigger output retargeting");
+    Expect(CodexLimiter::EndpointNotificationRequiresRetarget(nullptr, DEVICE_STATE_ACTIVE),
+        "endpoint removal notifications trigger output retargeting");
+    Expect(CodexLimiter::EndpointNotificationRequiresRetarget(L"{endpoint}", DEVICE_STATE_DISABLED),
+        "disabled endpoint notifications trigger output retargeting");
+    Expect(!CodexLimiter::EndpointNotificationRequiresRetarget(L"{endpoint}", DEVICE_STATE_ACTIVE),
+        "active endpoint notifications can be evaluated before retargeting");
+    Expect(CodexLimiter::PhysicalRenderEndpointScore(L"Kulaklıklar (HAVIT H655BT PRO)", Headphones) >
+            CodexLimiter::PhysicalRenderEndpointScore(L"Speaker (Realtek(R) Audio)", Speakers),
+        "headphones are preferred over speakers when both are active");
+    Expect(CodexLimiter::PhysicalRenderEndpointScore(L"TS35505 (NVIDIA High Definition Audio)", DigitalAudioDisplayDevice) <
+            CodexLimiter::PhysicalRenderEndpointScore(L"Speaker (Realtek(R) Audio)", Speakers),
+        "display audio endpoints are not preferred over real speakers");
+    Expect(CodexLimiter::PhysicalRenderEndpointScore(L"CABLE Input (VB-Audio Virtual Cable)", Speakers) < 0,
+        "virtual render endpoints are rejected as physical outputs");
+    Expect(CodexLimiter::LimiterHotkeyModifiers() == (MOD_CONTROL | MOD_ALT),
+        "limiter hotkeys use Ctrl+Alt modifiers");
+    Expect(CodexLimiter::kHotkeyLowerCeilingId != CodexLimiter::kHotkeyRaiseCeilingId &&
+            CodexLimiter::kHotkeyRaiseCeilingId != CodexLimiter::kHotkeyToggleLimiterId,
+        "limiter hotkey ids are unique");
+    Expect(CodexLimiter::LimiterHotkeyKey(CodexLimiter::kHotkeyLowerCeilingId) == 'A',
+        "Ctrl+Alt+A lowers limiter ceiling");
+    Expect(CodexLimiter::LimiterHotkeyKey(CodexLimiter::kHotkeyRaiseCeilingId) == 'D',
+        "Ctrl+Alt+D raises limiter ceiling");
+    Expect(CodexLimiter::LimiterHotkeyKey(CodexLimiter::kHotkeyToggleLimiterId) == 'S',
+        "Ctrl+Alt+S toggles limiter");
+    Expect(CodexLimiter::LimiterHotkeyStepMilliDb() == 1000,
+        "limiter hotkey step is 1 dB");
+    Expect(CodexLimiter::LimiterHotkeyKey(CodexLimiter::kHotkeyLowerBoostId) == VK_F6,
+        "Ctrl+Alt+F6 lowers soundbooster");
+    Expect(CodexLimiter::LimiterHotkeyKey(CodexLimiter::kHotkeyRaiseBoostId) == VK_F7,
+        "Ctrl+Alt+F7 raises soundbooster");
+    Expect(CodexLimiter::kHotkeyLowerBoostId != CodexLimiter::kHotkeyLowerCeilingId,
+        "boost hotkey ids do not overlap limiter ids");
+    Expect(CodexLimiter::LimiterHotkeyDisplay(CodexLimiter::kHotkeyLowerCeilingId) == std::wstring(L"Ctrl+Alt+A"),
+        "lower ceiling hotkey display is stable");
+    Expect(CodexLimiter::LimiterHotkeyDisplay(CodexLimiter::kHotkeyRaiseBoostId) == std::wstring(L"Ctrl+Alt+F7"),
+        "raise boost hotkey display is stable");
+    CodexLimiter::HotkeyBinding duplicateBindings[] = {
+        { CodexLimiter::kHotkeyLowerCeilingId, CodexLimiter::LimiterHotkeyModifiers(), 'A' },
+        { CodexLimiter::kHotkeyRaiseCeilingId, CodexLimiter::LimiterHotkeyModifiers(), 'A' },
+    };
+    Expect(CodexLimiter::HasDuplicateLimiterHotkey(
+            duplicateBindings, 2, CodexLimiter::kHotkeyLowerCeilingId,
+            CodexLimiter::LimiterHotkeyModifiers(), 'A'),
+        "duplicate hotkey bindings are rejected before saving");
+    Expect(!CodexLimiter::HasDuplicateLimiterHotkey(
+            duplicateBindings, 2, CodexLimiter::kHotkeyLowerCeilingId,
+            CodexLimiter::LimiterHotkeyModifiers(), 'D'),
+        "unique hotkey bindings are accepted before saving");
+    Expect(CodexLimiter::IsSupportedLimiterHotkey(CodexLimiter::LimiterHotkeyModifiers(), 'A'),
+        "Ctrl+Alt letter hotkeys are accepted");
+    Expect(!CodexLimiter::IsSupportedLimiterHotkey(MOD_ALT, 'A'),
+        "hotkey validation rejects missing Ctrl modifier");
+    Expect(CodexLimiter::IsHotkeyCaptureModifierKey(VK_CONTROL),
+        "hotkey capture ignores Control until the main key is pressed");
+    Expect(CodexLimiter::IsHotkeyCaptureModifierKey(VK_LCONTROL),
+        "hotkey capture ignores left Control");
+    Expect(CodexLimiter::IsHotkeyCaptureModifierKey(VK_MENU),
+        "hotkey capture ignores Alt until the main key is pressed");
+    Expect(CodexLimiter::IsHotkeyCaptureModifierKey(VK_RMENU),
+        "hotkey capture ignores right Alt");
+    Expect(CodexLimiter::IsHotkeyCaptureModifierKey(VK_SHIFT),
+        "hotkey capture ignores Shift instead of cancelling capture");
+    Expect(!CodexLimiter::IsHotkeyCaptureModifierKey('A'),
+        "hotkey capture treats letters as assignable keys");
+
+    CodexLimiter::LimiterSettings defaultSettings{};
+    Expect(defaultSettings.overlayEnabled, "overlay defaults enabled");
+    Expect(!defaultSettings.startWithWindows, "start with Windows defaults off");
+    Expect(defaultSettings.selectedTab == CodexLimiter::LimiterSettingsTab::Limiter,
+        "settings default to limiter tab");
+    Expect(CodexLimiter::StartupRegistryValueName() == std::wstring(L"CodexLimiter"),
+        "startup registry value name is stable");
+    Expect(CodexLimiter::QuoteStartupCommand(L"C:\\Apps\\LimiterTray.exe") ==
+            std::wstring(L"\"C:\\Apps\\LimiterTray.exe\""),
+        "startup command quotes executable path");
 
     CodexLimiter::LimiterSettings settings{};
     settings.enabled = false;

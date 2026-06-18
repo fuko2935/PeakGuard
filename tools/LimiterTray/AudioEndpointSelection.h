@@ -1,6 +1,7 @@
 #pragma once
 
 #include <windows.h>
+#include <mmdeviceapi.h>
 #include <mmreg.h>
 #include <ks.h>
 #include <ksmedia.h>
@@ -41,6 +42,54 @@ inline bool HasRestorableRenderEndpoint(const std::wstring& endpointId) {
 
 inline bool ShouldRestoreRenderEndpoint(DWORD waitResult, const std::wstring& endpointId) {
     return waitResult == WAIT_OBJECT_0 && HasRestorableRenderEndpoint(endpointId);
+}
+
+inline bool IsActiveEndpointState(DWORD state) {
+    return state == DEVICE_STATE_ACTIVE;
+}
+
+inline bool EndpointNotificationRequiresRetarget(LPCWSTR deviceId, DWORD state) {
+    return deviceId == nullptr || state != DEVICE_STATE_ACTIVE;
+}
+
+inline int PhysicalRenderEndpointScore(const std::wstring& endpointName, int formFactor) {
+    if (IsVirtualAudioEndpointName(endpointName)) {
+        return -1000;
+    }
+    if (formFactor == Headphones || formFactor == Headset) {
+        return 300;
+    }
+    if (formFactor == Speakers) {
+        return 200;
+    }
+    if (formFactor == DigitalAudioDisplayDevice || formFactor == SPDIF ||
+        formFactor == UnknownDigitalPassthrough) {
+        return -100;
+    }
+
+    const std::wstring name = LowerEndpointName(endpointName);
+    if (ContainsEndpointToken(name, L"headphone") ||
+        ContainsEndpointToken(name, L"headphones") ||
+        ContainsEndpointToken(name, L"kulaklik") ||
+        ContainsEndpointToken(name, L"kulaklık") ||
+        ContainsEndpointToken(name, L"headset") ||
+        ContainsEndpointToken(name, L"havit")) {
+        return 300;
+    }
+    if (ContainsEndpointToken(name, L"speaker") ||
+        ContainsEndpointToken(name, L"hoparlör") ||
+        ContainsEndpointToken(name, L"hoparlor")) {
+        return 200;
+    }
+    if (ContainsEndpointToken(name, L"nvidia") ||
+        ContainsEndpointToken(name, L"amd high definition") ||
+        ContainsEndpointToken(name, L"digital") ||
+        ContainsEndpointToken(name, L"dijital") ||
+        ContainsEndpointToken(name, L"display") ||
+        ContainsEndpointToken(name, L"monitor")) {
+        return -100;
+    }
+    return 50;
 }
 
 inline bool IsFloatPcmFormat(const WAVEFORMATEX* format) {

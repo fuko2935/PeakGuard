@@ -9,14 +9,33 @@ param()
 $ErrorActionPreference = 'Stop'
 
 $installDir = Join-Path $env:LOCALAPPDATA 'CodexLimiter'
+$exeDest = Join-Path $installDir 'LimiterTray.exe'
 $startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Codex Limiter'
 $shortcutPath = Join-Path $startMenuDir 'Codex Limiter.lnk'
 $runKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
 $runValueName = 'CodexLimiter'
 
+function Stop-LimiterTray {
+    $processes = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+    if ($processes.Count -eq 0) {
+        return
+    }
+
+    if (Test-Path -LiteralPath $exeDest) {
+        Start-Process -FilePath $exeDest -ArgumentList '--quit' -WindowStyle Hidden
+    }
+
+    Start-Sleep -Milliseconds 2500
+    $remaining = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+    if ($remaining.Count -gt 0) {
+        $remaining | Stop-Process -Force
+        $remaining | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
+    }
+}
+
 # 1. Stop processes
 Write-Host "Stopping LimiterTray..."
-Get-Process LimiterTray -ErrorAction SilentlyContinue | Stop-Process -Force
+Stop-LimiterTray
 
 # 2. Remove startup entry
 if (Test-Path -LiteralPath $runKeyPath) {

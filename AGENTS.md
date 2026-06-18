@@ -24,6 +24,9 @@ cmake --build build --config Debug
 # Build the Release tray app
 cmake --build build --config Release --target LimiterTray
 
+# Refresh the installed Start Menu/startup copy after Release changes
+.\scripts\Install-CodexLimiter.ps1 -Configuration Release
+
 # Build and run native tests
 cmake --build build --config Debug --target LimiterAudioTests
 .\build\tools\LimiterAudioTests\Debug\LimiterAudioTests.exe
@@ -39,8 +42,9 @@ No dedicated lint or typecheck command is configured. Treat CMake configure, MSV
 
 - **MUST** follow existing C++17, Win32, WASAPI, and CMake patterns before adding abstractions.
 - **MUST** keep shared limiter state changes compatible with `common/LimiterSharedState.h`.
-- **MUST** update or add `tools/LimiterAudioTests/` coverage when changing endpoint selection, limiter settings, audio policy constants, or shared-state helpers.
+- **MUST** update or add `tools/LimiterAudioTests/` coverage when changing endpoint selection, limiter settings, audio policy constants, hotkey/startup policy helpers, or shared-state helpers.
 - **MUST** run the relevant CMake build and test commands before claiming work is complete.
+- **MUST** run `.\scripts\Install-CodexLimiter.ps1 -Configuration Release` after Release tray changes when the user expects Start Menu or Windows startup to launch the updated app.
 - **MUST NOT** commit build outputs, binaries, logs, ETL traces, snapshots, or local worktrees.
 - **MUST NOT** run install/uninstall scripts for verification without considering their process, startup, shortcut, and local app data side effects.
 - **SHOULD** keep changes focused and avoid unrelated refactors in the audio path.
@@ -86,7 +90,7 @@ rg -n "add_executable|target_link_libraries|add_subdirectory" CMakeLists.txt too
 ## Testing Expectations
 
 - Unit-style/native regression tests live in `tools/LimiterAudioTests/main.cpp`.
-- Add test expectations for pure helper behavior in `AudioEndpointSelection.h`, `AudioPowerPolicy.h`, `LimiterSettings.h`, and `common/LimiterSharedState.h`.
+- Add test expectations for pure helper behavior in `AudioEndpointSelection.h`, `AudioPowerPolicy.h`, `HotkeyPolicy.h`, `LimiterSettings.h`, `StartupPolicy.h`, and `common/LimiterSharedState.h`.
 - Manual or hardware-dependent audio behavior should be documented in the final handoff when it cannot be covered by `LimiterAudioTests`.
 - For targeted verification, build only the relevant CMake target before running the executable.
 
