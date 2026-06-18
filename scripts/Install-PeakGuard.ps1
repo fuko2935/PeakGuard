@@ -1,7 +1,7 @@
 <#
 .SYNOPSIS
-    Installs Codex Limiter (WASAPI loopback mode).
-    Builds LimiterTray, copies to LocalAppData, creates a Start Menu shortcut, optionally sets HKCU startup, launches.
+    Installs PeakGuard (WASAPI loopback mode).
+    Builds PeakGuardTray, copies to LocalAppData, creates a Start Menu shortcut, optionally sets HKCU startup, launches.
     Run from repo root. Elevated not required for build, but HKCU Run key works without admin.
 #>
 [CmdletBinding()]
@@ -15,20 +15,20 @@ $ErrorActionPreference = 'Stop'
 
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot '..')
 $rootBuildDir = Join-Path $repoRoot 'build'
-$directBuildDir = Join-Path $repoRoot 'build/LimiterTray'
-$rootBuildExe = Join-Path $rootBuildDir "tools/LimiterTray/$Configuration/LimiterTray.exe"
-$directBuildExe = Join-Path $directBuildDir "$Configuration/LimiterTray.exe"
-$installDir = Join-Path $env:LOCALAPPDATA 'CodexLimiter'
-$exeDest = Join-Path $installDir 'LimiterTray.exe'
-$startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Codex Limiter'
-$shortcutPath = Join-Path $startMenuDir 'Codex Limiter.lnk'
+$directBuildDir = Join-Path $repoRoot 'build/PeakGuardTray'
+$rootBuildExe = Join-Path $rootBuildDir "tools/PeakGuardTray/$Configuration/PeakGuardTray.exe"
+$directBuildExe = Join-Path $directBuildDir "$Configuration/PeakGuardTray.exe"
+$installDir = Join-Path $env:LOCALAPPDATA 'PeakGuard'
+$exeDest = Join-Path $installDir 'PeakGuardTray.exe'
+$startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\PeakGuard'
+$shortcutPath = Join-Path $startMenuDir 'PeakGuard.lnk'
 $runKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$runValueName = 'CodexLimiter'
+$runValueName = 'PeakGuard'
 
 function Resolve-RequiredPath {
     param([string]$Path, [string]$Description)
     if (-not (Test-Path -LiteralPath $Path)) {
-        throw "$Description not found: $Path. Build first with: cmake --build build --config $Configuration --target LimiterTray"
+        throw "$Description not found: $Path. Build first with: cmake --build build --config $Configuration --target PeakGuardTray"
     }
     return (Resolve-Path -LiteralPath $Path).Path
 }
@@ -51,8 +51,46 @@ function Resolve-CMake {
     return $cmake.Source
 }
 
-function Stop-LimiterTray {
-    $processes = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+function Install-VBCableIfNeeded {
+    $vbCableExists = @(Get-CimInstance Win32_SoundDevice -ErrorAction SilentlyContinue |
+        Where-Object { $_.ProductName -match 'VB-Audio Virtual Cable|VB-CABLE|CABLE Input|CABLE Output' })
+    if ($vbCableExists.Count -gt 0) {
+        Write-Host 'Requirement met: VB-CABLE is already installed.'
+        return
+    }
+
+    Write-Host 'VB-CABLE not found. Downloading from official servers.'
+    $zipUrl = 'https://download.vb-audio.com/Download_CABLE/VBCABLE_Driver_Pack45.zip'
+    $tempZip = Join-Path $env:TEMP 'VBCABLE_Driver.zip'
+    $tempFolder = Join-Path $env:TEMP 'VBCABLE_Extract'
+
+    try {
+        Invoke-WebRequest -Uri $zipUrl -OutFile $tempZip -UserAgent 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)'
+        if (Test-Path -LiteralPath $tempFolder) {
+            Remove-Item -LiteralPath $tempFolder -Recurse -Force
+        }
+        Expand-Archive -LiteralPath $tempZip -DestinationPath $tempFolder -Force
+
+        $setupExe = Join-Path $tempFolder 'VBCABLE_Setup_x64.exe'
+        if (-not (Test-Path -LiteralPath $setupExe)) {
+            throw "VB-CABLE setup executable not found: $setupExe"
+        }
+
+        Write-Host "Launching VB-CABLE setup: $setupExe"
+        Start-Process -FilePath $setupExe -Verb RunAs -Wait | Out-Null
+
+        Remove-Item -LiteralPath $tempZip -Force -ErrorAction SilentlyContinue
+        Remove-Item -LiteralPath $tempFolder -Recurse -Force -ErrorAction SilentlyContinue
+        Write-Host 'VB-CABLE setup finished.'
+    } catch {
+        Write-Host "Failed to auto-install VB-CABLE: $_"
+        Write-Host 'Please install manually from: https://vb-audio.com/Cable/'
+        exit 1
+    }
+}
+
+function Stop-PeakGuardTray {
+    $processes = @(Get-Process PeakGuardTray -ErrorAction SilentlyContinue)
     if ($processes.Count -eq 0) {
         return
     }
@@ -62,19 +100,20 @@ function Stop-LimiterTray {
     }
 
     Start-Sleep -Milliseconds 2500
-    $remaining = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+    $remaining = @(Get-Process PeakGuardTray -ErrorAction SilentlyContinue)
     if ($remaining.Count -gt 0) {
         $remaining | Stop-Process -Force
         $remaining | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
     }
 }
 
-# 1. Build if needed. Prefer the root build tree used by README and AGENTS.md.
+# 1. Install dependency and build if needed. Prefer the root build tree used by README and AGENTS.md.
+Install-VBCableIfNeeded
 if (-not (Test-Path -LiteralPath $rootBuildExe) -and -not (Test-Path -LiteralPath $directBuildExe)) {
-    Write-Host "Building LimiterTray..."
+    Write-Host 'Building PeakGuardTray.'
     $cmakeExe = Resolve-CMake
     & $cmakeExe -S $repoRoot -B $rootBuildDir -A x64
-    & $cmakeExe --build $rootBuildDir --config $Configuration --target LimiterTray
+    & $cmakeExe --build $rootBuildDir --config $Configuration --target PeakGuardTray
 }
 
 $exeSource = if (Test-Path -LiteralPath $rootBuildExe) {
@@ -83,10 +122,10 @@ $exeSource = if (Test-Path -LiteralPath $rootBuildExe) {
     $directBuildExe
 }
 
-$exeSource = Resolve-RequiredPath $exeSource 'LimiterTray.exe'
+$exeSource = Resolve-RequiredPath $exeSource 'PeakGuardTray.exe'
 
 # 2. Copy to install directory
-Stop-LimiterTray
+Stop-PeakGuardTray
 New-Item -ItemType Directory -Force -Path $installDir | Out-Null
 Copy-Item -LiteralPath $exeSource -Destination $exeDest -Force
 Write-Host "Installed: $exeDest"
@@ -99,7 +138,7 @@ $shortcut.TargetPath = $exeDest
 $shortcut.Arguments = '--show'
 $shortcut.WorkingDirectory = $installDir
 $shortcut.IconLocation = "$exeDest,0"
-$shortcut.Description = 'Codex Limiter'
+$shortcut.Description = 'PeakGuard'
 $shortcut.Save()
 Write-Host "Start Menu shortcut created: $shortcutPath"
 
@@ -112,4 +151,4 @@ if ($EnableStartup) {
 
 # 5. Launch
 Start-Process -FilePath $exeDest -ArgumentList '--show'
-Write-Host "Codex Limiter started."
+Write-Host 'PeakGuard started.'

@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Uninstalls Codex Limiter.
+    Uninstalls PeakGuard.
     Stops tray, removes HKCU startup, removes installed files.
 #>
 [CmdletBinding()]
@@ -8,15 +8,15 @@ param()
 
 $ErrorActionPreference = 'Stop'
 
-$installDir = Join-Path $env:LOCALAPPDATA 'CodexLimiter'
-$exeDest = Join-Path $installDir 'LimiterTray.exe'
-$startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Codex Limiter'
-$shortcutPath = Join-Path $startMenuDir 'Codex Limiter.lnk'
+$installDir = Join-Path $env:LOCALAPPDATA 'PeakGuard'
+$exeDest = Join-Path $installDir 'PeakGuardTray.exe'
+$startMenuDir = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\PeakGuard'
+$shortcutPath = Join-Path $startMenuDir 'PeakGuard.lnk'
 $runKeyPath = 'HKCU:\Software\Microsoft\Windows\CurrentVersion\Run'
-$runValueName = 'CodexLimiter'
+$runValueName = 'PeakGuard'
 
-function Stop-LimiterTray {
-    $processes = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+function Stop-PeakGuardTray {
+    $processes = @(Get-Process PeakGuardTray -ErrorAction SilentlyContinue)
     if ($processes.Count -eq 0) {
         return
     }
@@ -26,7 +26,7 @@ function Stop-LimiterTray {
     }
 
     Start-Sleep -Milliseconds 2500
-    $remaining = @(Get-Process LimiterTray -ErrorAction SilentlyContinue)
+    $remaining = @(Get-Process PeakGuardTray -ErrorAction SilentlyContinue)
     if ($remaining.Count -gt 0) {
         $remaining | Stop-Process -Force
         $remaining | Wait-Process -Timeout 5 -ErrorAction SilentlyContinue
@@ -34,8 +34,8 @@ function Stop-LimiterTray {
 }
 
 # 1. Stop processes
-Write-Host "Stopping LimiterTray..."
-Stop-LimiterTray
+Write-Host 'Stopping PeakGuardTray...'
+Stop-PeakGuardTray
 
 # 2. Remove startup entry
 if (Test-Path -LiteralPath $runKeyPath) {
@@ -65,4 +65,4 @@ if (Test-Path -LiteralPath $installDir) {
     Write-Host "Removed: $installDir"
 }
 
-Write-Host "Codex Limiter uninstalled."
+Write-Host 'PeakGuard uninstalled.'
