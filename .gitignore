@@ -17,6 +17,11 @@ obj/
 *.exe
 *.lib
 *.exp
+*.zip
+*.7z
+*.tar
+*.tar.gz
+PeakGuard-Release-*/
 
 # Local machine state
 snapshots/
