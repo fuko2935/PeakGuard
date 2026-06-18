@@ -1,6 +1,6 @@
 <svg width="512" height="512" viewBox="0 0 512 512" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
   <title id="title">PeakGuard logo</title>
-  <desc id="desc">A shield with a guarded audio waveform peak.</desc>
+  <desc id="desc">A transparent shield with a guarded audio waveform peak.</desc>
   <defs>
     <linearGradient id="bg" x1="96" y1="56" x2="416" y2="456" gradientUnits="userSpaceOnUse">
       <stop stop-color="#19B6FF"/>
@@ -12,7 +12,6 @@
       <stop offset="1" stop-color="#8AE7FF"/>
     </linearGradient>
   </defs>
-  <rect width="512" height="512" rx="112" fill="#07111F"/>
   <path d="M256 56L400 112V230C400 326 343 411 256 456C169 411 112 326 112 230V112L256 56Z" fill="url(#bg)"/>
   <path d="M256 88L372 133V230C372 309 327 381 256 422C185 381 140 309 140 230V133L256 88Z" stroke="#D9F8FF" stroke-width="18" stroke-linejoin="round"/>
   <path d="M112 268H176L204 204L248 336L304 156L344 268H400" stroke="url(#pulse)" stroke-width="28" stroke-linecap="round" stroke-linejoin="round"/>
