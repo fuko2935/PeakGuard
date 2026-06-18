@@ -9,6 +9,8 @@ namespace CodexLimiter {
 struct LimiterSettings {
     bool enabled = true;
     LONG ceilingMilliDb = kDefaultCeilingMilliDb;
+    bool boostEnabled = false;
+    LONG boostMilliDb = kDefaultBoostMilliDb;
 };
 
 inline void ApplySettings(LimiterSharedState* state, const LimiterSettings& settings) {
@@ -18,6 +20,8 @@ inline void ApplySettings(LimiterSharedState* state, const LimiterSettings& sett
 
     InterlockedExchange(const_cast<volatile LONG*>(&state->enabled), settings.enabled ? 1 : 0);
     SetCeilingMilliDb(state, settings.ceilingMilliDb);
+    InterlockedExchange(const_cast<volatile LONG*>(&state->boostEnabled), settings.boostEnabled ? 1 : 0);
+    SetBoostMilliDb(state, settings.boostMilliDb);
 }
 
 inline LimiterSettings ReadSettingsFromState(const LimiterSharedState* state) {
@@ -28,6 +32,8 @@ inline LimiterSettings ReadSettingsFromState(const LimiterSharedState* state) {
 
     settings.enabled = state->enabled != 0;
     settings.ceilingMilliDb = ClampMilliDb(state->ceilingMilliDb);
+    settings.boostEnabled = state->boostEnabled != 0;
+    settings.boostMilliDb = ClampBoostMilliDb(state->boostMilliDb);
     return settings;
 }
 

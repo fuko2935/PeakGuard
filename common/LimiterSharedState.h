@@ -7,13 +7,17 @@
 namespace CodexLimiter {
 
 constexpr LONG kStateMagic = 0x434C494D; // CLIM
-constexpr LONG kStateVersion = 2;
+constexpr LONG kStateVersion = 3;
 constexpr LONG kDefaultCeilingMilliDb = -30000;
 constexpr LONG kMinCeilingMilliDb = -75000;
 constexpr LONG kMaxCeilingMilliDb = 0;
 constexpr LONG kLinearScale = 1000000000;
 constexpr LONG kMinLinearScaled = 1;
 constexpr LONG kDefaultLinearScaled = 31622776; // -30 dBFS
+constexpr LONG kDefaultBoostMilliDb = 0;
+constexpr LONG kMinBoostMilliDb = 0;
+constexpr LONG kMaxBoostMilliDb = 24000;
+constexpr LONGLONG kMaxBoostLinearScaled = 15848931925LL;
 
 enum class AudioMode : LONG {
     Loopback = 0
@@ -39,7 +43,10 @@ struct LimiterSharedState {
     volatile LONG audioMode;
     volatile LONG audioEngineState;
     volatile LONG sampleRate;
-    volatile LONG _reserved[4];
+    volatile LONG boostEnabled;
+    volatile LONG boostMilliDb;
+    volatile LONGLONG boostLinearScaled;
+    volatile LONG _reserved[2];
 };
 
 inline LONG ClampMilliDb(LONG value) {
@@ -63,6 +70,39 @@ inline LONG MilliDbToLinearScaled(LONG milliDb) {
         return kLinearScale;
     }
     return static_cast<LONG>(scaled + 0.5);
+}
+
+inline LONG ClampBoostMilliDb(LONG value) {
+    if (value < kMinBoostMilliDb) {
+        return kMinBoostMilliDb;
+    }
+    if (value > kMaxBoostMilliDb) {
+        return kMaxBoostMilliDb;
+    }
+    return value;
+}
+
+inline LONGLONG BoostMilliDbToLinearScaled(LONG milliDb) {
+    const float db = static_cast<float>(ClampBoostMilliDb(milliDb)) / 1000.0f;
+    const double linear = std::pow(10.0, static_cast<double>(db) / 20.0);
+    const double scaled = linear * static_cast<double>(kLinearScale);
+    if (scaled < static_cast<double>(kLinearScale)) {
+        return kLinearScale;
+    }
+    if (scaled > static_cast<double>(kMaxBoostLinearScaled)) {
+        return kMaxBoostLinearScaled;
+    }
+    return static_cast<LONGLONG>(scaled + 0.5);
+}
+
+inline float BoostScaledLinearToFloat(LONGLONG value) {
+    if (value < kLinearScale) {
+        value = kLinearScale;
+    }
+    if (value > kMaxBoostLinearScaled) {
+        value = kMaxBoostLinearScaled;
+    }
+    return static_cast<float>(static_cast<double>(value) / static_cast<double>(kLinearScale));
 }
 
 inline LONG LinearToMilliDb(float value) {
@@ -98,7 +138,11 @@ inline void InitializeStateFields(LimiterSharedState* state) {
     InterlockedExchange(const_cast<volatile LONG*>(&state->audioMode), static_cast<LONG>(AudioMode::Loopback));
     InterlockedExchange(const_cast<volatile LONG*>(&state->audioEngineState), static_cast<LONG>(AudioEngineState::Stopped));
     InterlockedExchange(const_cast<volatile LONG*>(&state->sampleRate), 0);
-    for (int i = 0; i < 4; ++i) {
+    InterlockedExchange(const_cast<volatile LONG*>(&state->boostEnabled), 0);
+    InterlockedExchange(const_cast<volatile LONG*>(&state->boostMilliDb), kDefaultBoostMilliDb);
+    InterlockedExchange64(const_cast<volatile LONGLONG*>(&state->boostLinearScaled),
+        BoostMilliDbToLinearScaled(kDefaultBoostMilliDb));
+    for (int i = 0; i < 2; ++i) {
         InterlockedExchange(const_cast<volatile LONG*>(&state->_reserved[i]), 0);
     }
 }
@@ -137,6 +181,17 @@ inline void SetCeilingMilliDb(LimiterSharedState* state, LONG milliDb) {
     const LONG clamped = ClampMilliDb(milliDb);
     InterlockedExchange(const_cast<volatile LONG*>(&state->ceilingMilliDb), clamped);
     InterlockedExchange(const_cast<volatile LONG*>(&state->ceilingLinearScaled), MilliDbToLinearScaled(clamped));
+}
+
+inline void SetBoostMilliDb(LimiterSharedState* state, LONG milliDb) {
+    if (state == nullptr) {
+        return;
+    }
+
+    const LONG clamped = ClampBoostMilliDb(milliDb);
+    InterlockedExchange(const_cast<volatile LONG*>(&state->boostMilliDb), clamped);
+    InterlockedExchange64(const_cast<volatile LONGLONG*>(&state->boostLinearScaled),
+        BoostMilliDbToLinearScaled(clamped));
 }
 
 class SharedLimiterMapping {
